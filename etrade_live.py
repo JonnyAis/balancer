@@ -291,12 +291,12 @@ results_to_test.loc[min_indexes].sort_values('imbalance')
 
 #%% wait and retry if optimal empty
 if optimal.empty:
-    time.sleep(60*30)
+    time.sleep(60*5)
     exec(open("etrade_live.py").read())
 
 #%% run order script
 if nyse.open_at_time(schedule, datetime.now(timezone('America/New_York'))): #is NYSE open now?
     exec(open("order_live_optimal.py").read())
 else:
-    time.sleep(60*30)
+    time.sleep(60*10)
     exec(open("etrade_live.py").read())

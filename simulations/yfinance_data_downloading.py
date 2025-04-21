@@ -11,8 +11,8 @@ min_days_threshold = 252 * 1 #minimum number of days of data required for a tick
 
 
 # Define the directory containing the data files
-ticker_file = r'C:\Users\jonat\OneDrive\Documents\GitHub\minimal\ticker_data\processed\tickers.xlsx'
-returns_csv_file = r'C:\Users\jonat\OneDrive\Documents\GitHub\minimal\returns_data.csv'
+ticker_file = r'C:\Users\jonat\OneDrive\Documents\GitHub\balancer\simulations\ticker_data\processed\tickers.xlsx'
+returns_csv_file = r'C:\Users\jonat\OneDrive\Documents\GitHub\balancer\simulations\returns_data.csv'
 
 # Import the table of tickers from the excel file
 ticker_data = pd.read_excel(
@@ -28,6 +28,8 @@ ticker_data['Ticker'] = ticker_data['Ticker'].astype(str)
 # Find unique values in the 'Ticker' column
 unique_tickers = ticker_data['Ticker'].unique()
 
+#test ticker - comment this line out if running full download
+#unique_tickers = unique_tickers[:5] # Use only the first five for testing
 
 # Function to check if the CSV file is up-to-date
 def is_csv_up_to_date(returns_csv_file):
