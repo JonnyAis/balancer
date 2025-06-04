@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 
 # ---set paramters---
-recency_threshold = 5 #days to check for recency of data
+recency_threshold = 1 #days to check for recency of data
 min_days_threshold = 252 * 1 #minimum number of days of data required for a ticker to be considered
 
 
@@ -29,7 +29,7 @@ ticker_data['Ticker'] = ticker_data['Ticker'].astype(str)
 unique_tickers = ticker_data['Ticker'].unique()
 
 #test ticker - comment this line out if running full download
-unique_tickers = unique_tickers[:5] # Use only the first five for testing
+#unique_tickers = unique_tickers[:10] # Use only the first ten for testing
 
 # Function to check if the CSV file is up-to-date
 def is_csv_up_to_date(returns_csv_file):
