@@ -1,73 +1,103 @@
+"""
+Updated version using the efficient Parquet-based system.
+
+This replaces the CSV-based approach with:
+1. Parquet storage for faster I/O
+2. Incremental updates (only download missing data)
+3. Better error handling and logging
+4. Metadata tracking
+"""
+
 import os
 import pandas as pd
-import yfinance as yf
 import openpyxl
 from datetime import datetime, timedelta
+from efficient_data_manager import EfficientDataManager
+import logging
 
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-# ---set paramters---
-recency_threshold = 1 #days to check for recency of data
-min_days_threshold = 252 * 1 #minimum number of days of data required for a ticker to be considered
+# ---set parameters---
+recency_threshold = 1  # days to check for recency of data
+min_days_threshold = 252 * 1  # minimum number of days of data required for a ticker
 
-
-# Define the directory containing the data files
+# Define file paths
 ticker_file = r'C:\Users\jonat\OneDrive\Documents\GitHub\balancer\simulations\ticker_data\processed\tickers.xlsx'
-returns_csv_file = r'C:\Users\jonat\OneDrive\Documents\GitHub\balancer\simulations\returns_data.csv'
+data_storage_dir = r'C:\Users\jonat\OneDrive\Documents\GitHub\balancer\simulations\data_storage'
 
-# Import the table of tickers from the excel file
-ticker_data = pd.read_excel(
-    ticker_file,
-    sheet_name='Sheet1',
-    header=0,
-    usecols='A:B'
-)
-
-# Convert the Ticker column to a string
-ticker_data['Ticker'] = ticker_data['Ticker'].astype(str)
-
-# Find unique values in the 'Ticker' column
-unique_tickers = ticker_data['Ticker'].unique()
-
-#test ticker - comment this line out if running full download
-#unique_tickers = unique_tickers[:10] # Use only the first ten for testing
-
-# Function to check if the CSV file is up-to-date
-def is_csv_up_to_date(returns_csv_file):
-    if not os.path.exists(returns_csv_file):
-        return False
-    csv_data = pd.read_csv(returns_csv_file, index_col=0, parse_dates=True)
-    if csv_data.empty:
-        return False
-    last_date = csv_data.index.max()
-    if pd.isnull(last_date):
-        return False
-    return (datetime.now() - last_date) < timedelta(days=recency_threshold)
-
-# Check if the CSV file exists and is up-to-date
-if is_csv_up_to_date(returns_csv_file):
-    # Load data from the CSV file
-    returns_data = pd.read_csv(returns_csv_file, index_col=0, parse_dates=True)
-else:
-    # Create an empty DataFrame to store the percentage change data
-    returns_data = pd.DataFrame()
-
-    # Loop through each ticker to download data, calculate percentage change, and add to DataFrame
-    for ticker in unique_tickers:
-        print(f"Processing ticker: {ticker}")
-        data = yf.download(
-            tickers=ticker,
-            period='max',
-            auto_adjust=True
+def load_ticker_list(ticker_file: str) -> list:
+    """Load and clean the ticker list from Excel file."""
+    try:
+        # Import the table of tickers from the excel file
+        ticker_data = pd.read_excel(
+            ticker_file,
+            sheet_name='Sheet1',
+            header=0,
+            usecols='A:B'
         )
-        print(f"Data for {ticker}:")
-        print(data.tail())  # Print the last few rows of the data to check if it's being downloaded correctly
-        if len(data) >= min_days_threshold and not pd.isnull(data['Close'].iloc[-1].item()):
-            returns_data[ticker] = data['Close'].pct_change()
-        else:
-            print(f"Skipping ticker {ticker} due to insufficient data or not being currently traded.")
+        
+        # Convert the Ticker column to a string and clean
+        ticker_data['Ticker'] = ticker_data['Ticker'].astype(str)
+        unique_tickers = ticker_data['Ticker'].unique()
+        
+        # Clean up ticker list (remove nan, strip whitespace, uppercase)
+        cleaned_tickers = []
+        for ticker in unique_tickers:
+            if ticker and ticker.lower() != 'nan':
+                cleaned_tickers.append(ticker.strip().upper())
+        
+        return cleaned_tickers
+    except Exception as e:
+        logger.error(f"Error loading ticker list: {e}")
+        return []
 
-    # Save the returns data to a CSV file
-    returns_data.to_csv(returns_csv_file)
+def main():
+    """Main function to update financial data using EfficientDataManager."""
+    logger.info("Starting data update process with EfficientDataManager")
+    
+    # Load ticker list
+    unique_tickers = load_ticker_list(ticker_file)
+    logger.info(f"Loaded {len(unique_tickers)} unique tickers")
+    
+    # Uncomment for testing with subset
+    # unique_tickers = unique_tickers[:10]  # Use only the first ten for testing
+    
+    # Initialize the efficient data manager
+    data_manager = EfficientDataManager(
+        data_dir=data_storage_dir,
+        min_days_threshold=min_days_threshold
+    )
+    
+    # Check if data is up-to-date
+    if data_manager.is_data_recent(days=recency_threshold):
+        logger.info("Data is recent, loading existing data")
+        returns_data = data_manager.get_returns_matrix()
+    else:
+        logger.info("Data needs updating, performing incremental update")
+        
+        # Update data (incremental updates only download missing data)
+        success_count, failed_tickers = data_manager.update_tickers(unique_tickers, max_workers=5)
+        logger.info(f"Updated {success_count} tickers successfully")
+        if failed_tickers:
+            logger.warning(f"Failed tickers: {failed_tickers}")
+        
+        # Get the updated returns matrix
+        returns_data = data_manager.get_returns_matrix()
+    
+    # Display summary
+    logger.info("Final returns data summary:")
+    logger.info(f"Shape: {returns_data.shape}")
+    logger.info(f"Date range: {returns_data.index.min()} to {returns_data.index.max()}")
+    logger.info(f"Tickers: {len(returns_data.columns)}")
+    
+    print("Data update complete!")
+    print(f"Returns matrix shape: {returns_data.shape}")
+    print(f"Latest 5 rows:")
+    print(returns_data.tail())
+    
+    return returns_data
 
-print("Final returns data:")
-print(returns_data)
+if __name__ == "__main__":
+    returns_data = main()

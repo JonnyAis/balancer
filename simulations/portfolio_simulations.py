@@ -1,7 +1,24 @@
+"""
+Portfolio simulation using the efficient Parquet-based data system.
+"""
+
 import random
 import numpy as np
+import pandas as pd
+from efficient_data_manager import EfficientDataManager
+import logging
 
-#generate correlation matrix and mean returns
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Initialize data manager and load returns data
+data_manager = EfficientDataManager()
+returns_data = data_manager.get_returns_matrix()
+
+logger.info(f"Loaded returns data with shape: {returns_data.shape}")
+
+# Generate correlation matrix and mean returns
 cov_matrix = returns_data.cov()
 mean_returns = returns_data.mean()
 
@@ -25,10 +42,19 @@ def calculate_portfolio_returns(stocks, simulated_returns):
 # Simulate multiple portfolios
 portfolio_results = {}
 for i in range(num_portfolios):
-    selected_stocks = random.sample(list(returns_data.columns), num_stocks_per_portfolio)
+    available_stocks = list(returns_data.columns)
+    if len(available_stocks) < num_stocks_per_portfolio:
+        logger.warning(f"Only {len(available_stocks)} stocks available, adjusting portfolio size")
+        num_stocks_per_portfolio = len(available_stocks)
+    
+    selected_stocks = random.sample(available_stocks, num_stocks_per_portfolio)
     
     # Determine the overlapping date range for the selected stocks
     selected_data = returns_data[selected_stocks].dropna(how='any')
+    
+    if selected_data.empty:
+        logger.warning(f"No overlapping data for portfolio {i+1}, skipping")
+        continue
     
     # Calculate historical mean returns and covariance matrix for the overlapping date range
     mean_returns = selected_data.mean()
@@ -47,4 +73,8 @@ for i in range(num_portfolios):
 # Convert results to DataFrame
 portfolio_results_df = pd.DataFrame(portfolio_results)
 
-print(portfolio_results_df)
+logger.info(f"Portfolio simulation complete. Generated {len(portfolio_results_df.columns)} portfolios")
+print("Portfolio simulation results:")
+print(portfolio_results_df.head())
+print(f"\nFinal portfolio values after {time_horizon_years} years:")
+print(portfolio_results_df.iloc[-1])
