@@ -203,35 +203,136 @@ curr_shares = pd.DataFrame(lots.groupby(['accountIdKey','asset_class'])['remaini
 curr_shares = curr_shares[curr_shares.index != brokerage_id] #drop brokerage
 curr_shares = curr_shares.reset_index().rename_axis(None, axis=1).set_index('accountIdKey')
 
-#%% defines up_down function to create possible allocations to test based on current values
+#%% Calculate optimal theoretical allocations first (NEW APPROACH)
 
-perc_diff = 0.05 #sets allowable difference from current 
+def calculate_optimal_allocation(account_id_key, total_value, target_percentages, current_prices):
+    """
+    Calculate the theoretical optimal allocation in shares for each asset class.
+    Returns both the exact optimal (fractional) and nearby integer combinations to test.
+    """
+    # Calculate target dollar amounts
+    target_large = total_value * target_percentages['Large'] / 100
+    target_small = total_value * target_percentages['Small'] / 100  
+    target_international = total_value * target_percentages['International'] / 100
+    target_bonds = total_value * target_percentages['Bonds'] / 100
+    
+    # Calculate optimal shares (fractional)
+    optimal_large_shares = target_large / current_prices['VOO']
+    optimal_small_shares = target_small / current_prices['VBR']
+    optimal_international_shares = target_international / current_prices['IXUS']
+    optimal_bonds_shares = target_bonds / current_prices['BND']
+    
+    return {
+        'accountIdKey': account_id_key,
+        'optimal_shares': {
+            'Large': optimal_large_shares,
+            'Small': optimal_small_shares, 
+            'International': optimal_international_shares,
+            'Bonds': optimal_bonds_shares
+        },
+        'target_values': {
+            'Large': target_large,
+            'Small': target_small,
+            'International': target_international, 
+            'Bonds': target_bonds
+        }
+    }
 
-def up_down(new_result_x, perc_diff): #could later make it calculate length of the array and loop through rather than prespecify
-    if isinstance(new_result_x, float):
-        a = list(range(math.floor(new_result_x*(1-perc_diff)),math.ceil(new_result_x*(1+perc_diff))))
-        return pd.DataFrame(a, columns=['Value'])
-    else:
-        ranges = [list(range(math.floor(x * (1 - perc_diff)), math.ceil(x * (1 + perc_diff)))) for x in new_result_x]
-        return pd.DataFrame(itertools.product(*ranges), columns=['Large', 'Small', 'International', 'Bonds']).drop_duplicates()
+def generate_feasible_combinations(optimal_shares, max_deviation=2):
+    """
+    Generate integer share combinations around the optimal fractional allocation.
+    
+    Args:
+        optimal_shares: Dict with optimal fractional shares for each asset class
+        max_deviation: Maximum number of shares to deviate from floor/ceil of optimal
+    
+    Returns:
+        DataFrame with feasible integer combinations to test
+    """
+    # For each asset class, create a small range around the optimal
+    large_base = math.floor(optimal_shares['Large'])
+    small_base = math.floor(optimal_shares['Small'])
+    international_base = math.floor(optimal_shares['International']) 
+    bonds_base = math.floor(optimal_shares['Bonds'])
+    
+    # Create ranges around the optimal (floor to ceil + small deviation)
+    large_range = list(range(
+        max(0, large_base - max_deviation), 
+        large_base + max_deviation + 2
+    ))
+    small_range = list(range(
+        max(0, small_base - max_deviation),
+        small_base + max_deviation + 2  
+    ))
+    international_range = list(range(
+        max(0, international_base - max_deviation),
+        international_base + max_deviation + 2
+    ))
+    bonds_range = list(range(
+        max(0, bonds_base - max_deviation), 
+        bonds_base + max_deviation + 2
+    ))
+    
+    # Generate all combinations
+    combinations = list(itertools.product(
+        large_range, small_range, international_range, bonds_range
+    ))
+    
+    return pd.DataFrame(combinations, columns=['Large_shares', 'Small_shares', 'International_shares', 'Bonds_shares'])
 
-#%% creates results to test dataframe
+#%% Generate results to test using optimal-first approach
+
 results_to_test = []
 
-for index, row in curr_shares.iterrows():
-    df_temp = pd.DataFrame(up_down(row.to_numpy(),perc_diff))
-    df_temp['accountIdKey'] = index
-    results_to_test.append(df_temp)
+# Get current prices
+current_prices = {
+    'VOO': symbols.loc['VOO', 'lastTrade'],
+    'VBR': symbols.loc['VBR', 'lastTrade'], 
+    'IXUS': symbols.loc['IXUS', 'lastTrade'],
+    'BND': symbols.loc['BND', 'lastTrade']
+}
+
+# Get target percentages from existing class_balance
+target_percentages = {
+    'Large': 40,
+    'Small': 12, 
+    'International': 28,
+    'Bonds': 20
+}
+
+for account_id_key in curr_shares.index:
+    # Get total account value
+    total_value = total_balance_by_acct.loc[
+        total_balance_by_acct['accountIdKey'] == account_id_key, 
+        'total_current_acct_value'
+    ].iloc[0]
+    
+    # Calculate optimal allocation
+    optimal_data = calculate_optimal_allocation(
+        account_id_key, total_value, target_percentages, current_prices
+    )
+    
+    # Generate feasible combinations around optimal
+    feasible_combinations = generate_feasible_combinations(
+        optimal_data['optimal_shares'], 
+        max_deviation=2  # Only test +/- 2 shares from optimal
+    )
+    
+    # Add account identifier and target values
+    feasible_combinations['accountIdKey'] = account_id_key
+    feasible_combinations['total_current_acct_value'] = total_value
+    
+    # Add target values for imbalance calculation
+    for asset_class, target_value in optimal_data['target_values'].items():
+        feasible_combinations[f'{asset_class}_target_value'] = target_value
+    
+    results_to_test.append(feasible_combinations)
 
 results_to_test = pd.concat(results_to_test, ignore_index=True)
 
-del(df_temp, index, row)
-
-results_to_test.reset_index(drop = True, inplace = True)
-results_to_test = results_to_test.merge(total_balance_by_acct[['total_current_acct_value','accountIdKey']], how = 'left', left_on = 'accountIdKey', right_on = 'accountIdKey')
-
-#%% pulls in data from account_balance
-results_to_test = results_to_test.merge(account_balance.pivot(index='accountIdKey',columns = 'asset_class',values='target_value').reset_index().rename_axis(None, axis=1).set_index('accountIdKey'),how='left',left_on = 'accountIdKey', right_index = True,suffixes=('_shares','_target_value'))
+# Log the improvement
+print(f"New optimal-first approach: Testing {len(results_to_test)} combinations")
+print(f"Combinations per account: ~{len(results_to_test) // len(curr_shares.index)}")
 
 #%%
 def imbalance(Large_shares, Small_shares, International_shares, Bonds_shares,
