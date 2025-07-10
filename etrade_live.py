@@ -129,17 +129,66 @@ del classes
 class_balance = class_balance.set_index('asset_class')
 class_balance
 
+# Debug: Check the positions data structure first
+print("Positions DataFrame columns:", positions.columns.tolist())
+print("Sample positions data:")
+print(positions.head())
+
+# Check if lotsDetails column exists and what it contains
+if 'lotsDetails' in positions.columns:
+    print("\nLotsDetails URLs:")
+    for i, url in enumerate(list(positions['lotsDetails'])[:3]):  # Show first 3 URLs
+        print(f"{i+1}: {url}")
+else:
+    print("ERROR: 'lotsDetails' column not found in positions DataFrame")
+    print("Available columns:", positions.columns.tolist())
+    raise ValueError("Cannot proceed without lotsDetails column")
+
 #%% loop through lotsDetails to get all lot info
 
 lots_list = []
 
 for lot_url in list(positions['lotsDetails']):
-    lot_resp = session.get(lot_url)
-    lot_resp_json = lot_resp.json()
-    lots_temp = pd.DataFrame(lot_resp_json['PositionLotsResponse']['PositionLot'])
-    lots_list.append(lots_temp)
+    try:
+        lot_resp = session.get(lot_url)
+        lot_resp_json = lot_resp.json()
+        
+        # Debug: Print the response structure to understand what's returned
+        print(f"Response keys: {lot_resp_json.keys()}")
+        print(f"Full response: {lot_resp_json}")
+        
+        # Check if the expected structure exists
+        if 'PositionLotsResponse' in lot_resp_json:
+            if 'PositionLot' in lot_resp_json['PositionLotsResponse']:
+                lots_temp = pd.DataFrame(lot_resp_json['PositionLotsResponse']['PositionLot'])
+                lots_list.append(lots_temp)
+            else:
+                print(f"Warning: 'PositionLot' not found in response for {lot_url}")
+                print(f"Available keys in PositionLotsResponse: {lot_resp_json['PositionLotsResponse'].keys()}")
+        else:
+            print(f"Error: 'PositionLotsResponse' not found in response for {lot_url}")
+            print(f"Response status: {lot_resp.status_code}")
+            print(f"Response content: {lot_resp.text}")
+            
+    except Exception as e:
+        print(f"Error processing lot URL {lot_url}: {e}")
+        continue
 
-lots = pd.concat(lots_list, ignore_index=True)
+# Only proceed if we have some lots data
+if lots_list:
+    lots = pd.concat(lots_list, ignore_index=True)
+    print(f"Successfully loaded {len(lots)} lot records")
+else:
+    print("CRITICAL ERROR: No lot data was successfully loaded from lotsDetails API")
+    print("Cannot proceed with portfolio optimization without accurate position data")
+    print("Please check:")
+    print("1. E*TRADE API session is still valid")
+    print("2. API endpoints haven't changed")
+    print("3. Network connectivity")
+    print("4. API rate limits")
+    
+    # Stop execution - do not proceed with invalid/missing data
+    raise RuntimeError("Failed to load position lots data from E*TRADE API")
 
 lots
 #%% cleans up lots dataframe
