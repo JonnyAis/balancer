@@ -1,3 +1,5 @@
-# config_file
-etrade_key = #enter your key here 
-etrade_secret = #enter your secret here   
+# Copy this file to config_file.py and insert your real credentials.
+# DO NOT COMMIT config_file.py (it is listed in .gitignore).
+# Preferred approach: use environment variables instead of a file if possible.
+etrade_key = "YOUR_CONSUMER_KEY"
+etrade_secret = "YOUR_CONSUMER_SECRET"

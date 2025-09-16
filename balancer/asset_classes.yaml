@@ -1,0 +1,17 @@
+# filepath: balancer/asset_classes.yaml
+classes:
+  Large:
+    target_percent: 40
+    preferred_symbol: VOO
+  Small:
+    target_percent: 12
+    preferred_symbol: VBR
+  International:
+    target_percent: 28
+    preferred_symbol: IXUS
+  Bonds:
+    target_percent: 20
+    preferred_symbol: BND
+rebalance:
+  min_percent_drift: 0.25
+  min_notional_trade: 100

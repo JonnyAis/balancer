@@ -1,3 +1,6 @@
+# LEGACY: This script is superseded by balancer/auth.py and kept only for reference.
+# It will be moved to archive/ later.
+
 # %% install
 #!pip install rauth
 #!pip install webbrowser
@@ -31,9 +34,6 @@ def _mask(v: str) -> str:
 
 print(f"[Auth][LEGACY] Credentials loaded (key={_mask(etrade_key)})")
 print("[Auth][LEGACY] This script is deprecated. Use balancer.auth.start_session instead.")
-
-# LEGACY: This script is superseded by balancer/auth.py and kept only for reference.
-# It will be moved to archive/ later.
 
 # %% creates calendar
 nyse = mcal.get_calendar('NYSE')

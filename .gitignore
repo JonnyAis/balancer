@@ -1,3 +1,24 @@
-.vscode/settings.json
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Secrets / local config
 config_file.py
-returns_data.csv
+.env
+tokens.json
+
+# Data / simulations / artifacts (adjust if you want to keep some)
+simulations/
+experimental/
+simulation_runs/
+data_storage/
+*.parquet
+*.csv
+*.xlsx
+*.log
+
+# Misc
+repo_file_list.txt
