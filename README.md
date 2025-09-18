@@ -3,11 +3,17 @@
 
 Balancer connects to your E*TRADE accounts, computes trades to move toward your target ETF allocation, and (optionally) executes them.
 
-## Why
+## Why I built this
 I wanted a simple, low‑cost, ETF-only rebalancer for retirement accounts without paying robo fees or accepting quarterly drift. Also a project to teach myself Python 🐍.
 
 > DISCLAIMER: Personal finance software, not investment advice. Use at your own risk. Always start in `preview` mode and test in the E*TRADE sandbox before live trading.  
 > E*TRADE developer portal: https://developer.etrade.com/home
+
+## Features
+- 🔒 **Safety-first**: `preview` → `confirm` → `auto`, plus a global kill switch.
+- 🧮 **Configurable**: set your preferences for ETFs, target allocations, rebalance frequency, etc.
+- 🔁 **Loop mode**: run on a schedule for hands-off upkeep.
+- 🧰 **Designed for non-taxable accounts** (401k/IRA). Taxable version (with tax-loss harvesting + multi-ticker diversity) is on the roadmap.
 
 ---
 
