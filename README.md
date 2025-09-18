@@ -161,15 +161,9 @@ Other fields:
 ---
 
 ## Roadmap (Potential)
-- Multi-symbol per class
-- Tax-aware (for taxable accounts)
-- Cross-account optimization
-- Advanced order types
-
+- Tax-aware trading for non-retirement accounts 
+- Custom diversification based on existing assets (e.g., company stock)
 ---
-
-## Emergency Stop
-Set `REBALANCER_KILL=1` before run.
 
 ## License
 MIT (see MIT License.txt)
