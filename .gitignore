@@ -6,13 +6,13 @@ __pycache__/
 *.py[cod]
 
 # Secrets / local config
-config_file.py
-.env
 tokens.json
 credentials.py
+.env
 
-# Data / simulations / artifacts (adjust if you want to keep some)
+# Data / simulations / artifacts / experiments not part of main branch yet
 archive/
+taxable_account/
 simulations/
 experimental/
 simulation_runs/
@@ -21,6 +21,3 @@ data_storage/
 *.csv
 *.xlsx
 *.log
-
-# Misc
-repo_file_list.txt
