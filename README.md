@@ -1,13 +1,12 @@
+<img width="857" height="180" alt="image" src="https://github.com/user-attachments/assets/9482367a-89c9-4149-9d92-7c0bfd2f684e" />
+
 # Balancer — Automatic E*TRADE Portfolio Rebalancer
 > Keep retirement accounts aligned with your target allocation—safely and automatically.
 
 Balancer connects to your E*TRADE accounts, computes trades to move toward your target ETF allocation, and (optionally) executes them.
 
 ## Why I built this
-I wanted a simple, low‑cost, ETF-only rebalancer for retirement accounts without paying robo fees or accepting quarterly drift. Also a project to teach myself Python 🐍.
-
-> DISCLAIMER: Personal finance software, not investment advice. Use at your own risk. Always start in `preview` mode and test in the E*TRADE sandbox before live trading.  
-> E*TRADE developer portal: https://developer.etrade.com/home
+I wanted a simple and free portfolio rebalancer for retirement accounts without paying roboadvisor fees or accepting quarterly drift. I also needed a project to teach myself Python 🐍. I've been using versions of this for the last few years but am finally getting around to publishing for anyone to use.
 
 ## Features
 - 🔒 **Safety-first**: `preview` → `confirm` → `auto`, plus a global kill switch.
@@ -15,12 +14,17 @@ I wanted a simple, low‑cost, ETF-only rebalancer for retirement accounts witho
 - 🔁 **Loop mode**: run on a schedule for hands-off upkeep.
 - 🧰 **Designed for non-taxable accounts** (401k/IRA). Taxable version (with tax-loss harvesting + multi-ticker diversity) is on the roadmap.
 
+> DISCLAIMERS:
+> Personal finance software, not investment advice.
+> Use at your own risk.
+> Always start in `preview` mode and test in the E*TRADE sandbox before live trading.
+
 ---
 
 ## Quick Start
 
 ### 1. E*TRADE Developer Setup
-1. Create a developer account + app.
+1. Create a developer account + app on the E*TRADE developer portal: https://developer.etrade.com/home
 2. Obtain consumer key & secret.
 3. Enable sandbox first.
 
@@ -48,6 +52,14 @@ Alternative (local file you do NOT commit):
 
 ### 4. Configure
 Edit `balancer/config.yaml` (targets, optimizer, trading mode, filters).
+
+See inline comments in balancer/config.yaml for every field. Key sections include:
+- classes — target % and representative ETF per class
+- rebalance — heuristic thresholds and integer optimizer parameters
+- accounts — include/exclude filters by account description
+- trading — behavior (mode, caps, etc.)
+- loop — interval and toggles for run_loop.py
+
 
 Example excerpt:
 ```yaml
