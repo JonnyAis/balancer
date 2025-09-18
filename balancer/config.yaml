@@ -15,3 +15,5 @@ classes:
 rebalance:
   min_percent_drift: 0.25
   min_notional_trade: 100
+  max_notional_trade: 1000      # cap per individual trade adjustment
+  account_min_turnover: 2000    # minimum total BUY+SELL notional required for the account
