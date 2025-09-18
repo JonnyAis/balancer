@@ -9,8 +9,10 @@ __pycache__/
 config_file.py
 .env
 tokens.json
+credentials.py
 
 # Data / simulations / artifacts (adjust if you want to keep some)
+archive/
 simulations/
 experimental/
 simulation_runs/

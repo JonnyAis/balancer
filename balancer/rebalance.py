@@ -15,7 +15,13 @@ def current_weights(positions_df, quotes_df, symbol_to_class: dict):
 
 def build_trades(targets: dict, current: dict, total_value: float,
                  prices: dict, class_to_symbol: dict,
-                 min_drift=0.5, min_notional=100.0):
+                 min_drift=0.5, min_notional=100.0,
+                 max_notional_trade=None):
+    """
+    Generate trades to move each asset class toward target within one account.
+
+    max_notional_trade: hard cap (absolute dollars) per generated trade.
+    """
     trades = []
     if total_value <= 0:
         return trades
@@ -28,16 +34,33 @@ def build_trades(targets: dict, current: dict, total_value: float,
         if sym not in prices:
             continue
         delta_value = total_value * (drift_pct / 100.0)
+
+        # Apply per-trade notional cap (if provided)
+        if max_notional_trade and abs(delta_value) > max_notional_trade:
+            delta_value = max_notional_trade if delta_value > 0 else -max_notional_trade
+
+        # Skip if below minimum notional (after cap)
         if abs(delta_value) < min_notional:
             continue
-        qty = int(delta_value / prices[sym])
-        if qty == 0:
+
+        price = prices[sym]
+        if not price or price <= 0:
             continue
+
+        qty = int(delta_value / price)
+        if qty == 0:
+            # Try rounding direction once if value large enough
+            if abs(delta_value / price) >= 0.5:
+                qty = 1 if delta_value > 0 else -1
+            else:
+                continue
+
         trades.append({
             "asset_class": cls,
             "symbol": sym,
             "action": "BUY" if qty > 0 else "SELL",
             "quantity": abs(qty),
-            "est_notional": abs(qty) * prices[sym]
+            "est_notional": round(abs(qty) * price, 2),
+            "drift_pct": round(drift_pct, 3)
         })
     return trades

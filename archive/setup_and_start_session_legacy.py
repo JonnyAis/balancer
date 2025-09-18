@@ -24,7 +24,7 @@ from pytz import timezone
 import pandas_market_calendars as mcal
 from datetime import datetime, timedelta
 import timeit
-from config_file import etrade_key, etrade_secret 
+from credentials  import etrade_key, etrade_secret 
 
 def _mask(v: str) -> str:
     return "*" * (len(v)-4) + v[-4:] if v and len(v) > 4 else "****"

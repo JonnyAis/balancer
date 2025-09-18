@@ -1,19 +1,45 @@
-# filepath: balancer/asset_classes.yaml
+# filepath: c:\Users\jonat\OneDrive\Documents\GitHub\balancer\balancer\config.yaml
+# Target portfolio: each asset class has a target_percent (of total acct value incl. cash)
+# and a single preferred_symbol (ETF) the allocator will hold for that class.
 classes:
-  Large:
-    target_percent: 40
-    preferred_symbol: VOO
-  Small:
-    target_percent: 12
-    preferred_symbol: VBR
-  International:
-    target_percent: 28
-    preferred_symbol: IXUS
-  Bonds:
-    target_percent: 20
-    preferred_symbol: BND
+  Large:         { target_percent: 40, preferred_symbol: VOO }
+  Small:         { target_percent: 12, preferred_symbol: VBR }
+  International: { target_percent: 28, preferred_symbol: IXUS }
+  Bonds:         { target_percent: 20, preferred_symbol: BND }
+
+# Rebalancing / allocation parameters
 rebalance:
-  min_percent_drift: 0.25
-  min_notional_trade: 100
-  max_notional_trade: 1000      # cap per individual trade adjustment
-  account_min_turnover: 2000    # minimum total BUY+SELL notional required for the account
+  # Heuristic engine thresholds (mostly ignored when integer optimizer enabled):
+  min_percent_drift: 0.0        # Ignore drifts smaller than this percent (per class); 0.0 = disabled
+  min_notional_trade: 0         # Skip any single trade smaller than this dollar amount
+  max_notional_trade: 10000     # Cap any single trade notional; 0 or large number = no cap
+  account_min_turnover: 1       # Require at least this aggregate $ (buys + sells) or skip the account
+
+  # Integer (whole-share) optimizer (enumeration) — replaces heuristic when enabled.
+  integer_optimizer:
+    enabled: true               # true = use global integer allocation; false = use heuristic drift logic
+    window: 8                   # Share search window: explores (target_shares - window) .. (target_shares + window)
+    turnover_penalty: 0.0       # Adds (penalty * total absolute share changes) to objective; >0 reduces churn
+    cash_buffer: 0.0            # Leave at least this much cash unallocated (per account)
+
+# Background loop (optional daemon-style periodic rebalance)
+loop:
+  enabled: false                # true = run repeatedly; requires trading.mode=auto to actually place orders
+  interval_minutes: 30          # Sleep duration between cycles when loop.enabled=true
+
+# Account filtering (by description)
+accounts:
+  exclude_if_desc_contains: ["brokerage"]  # Skip any account whose description contains any of these substrings (case-insensitive)
+  include_only_descriptions: []            # If non-empty, ONLY include accounts whose description exactly matches one of these (case-insensitive). Empty = disabled.
+
+# Trading / execution control
+trading:
+  # mode:
+  #   preview = show plan only (no orders)
+  #   confirm = show plan then interactive y/N prompt before executing
+  #   auto    = show plan then execute immediately (needed for unattended loop)
+  mode: confirm
+
+  max_orders_per_account: 20    # Hard cap on number of orders per account per run (prevents runaway)
+  price_type: MARKET            # Placeholder for future order types (currently only MARKET)
+  allow_partial_funding_scale: true  # If true and post-sell cash < planned buys, scale buys down; false = drop buys
