@@ -10,10 +10,10 @@ classes:
 # Rebalancing / allocation parameters
 rebalance:
   # Heuristic engine thresholds (mostly ignored when integer optimizer enabled):
-  min_percent_drift: 0.0        # Ignore drifts smaller than this percent (per class); 0.0 = disabled
-  min_notional_trade: 0         # Skip any single trade smaller than this dollar amount
+  min_percent_drift: 0.1        # Ignore drifts smaller than this percent (per class); 0.0 = disabled
+  min_notional_trade: 100       # Skip any single trade smaller than this dollar amount
   max_notional_trade: 10000     # Cap any single trade notional; 0 or large number = no cap
-  account_min_turnover: 1       # Require at least this aggregate $ (buys + sells) or skip the account
+  account_min_turnover: 200       # Require at least this aggregate $ (buys + sells) or skip the account
 
   # Integer (whole-share) optimizer (enumeration) — replaces heuristic when enabled.
   integer_optimizer:
@@ -24,7 +24,7 @@ rebalance:
 
 # Background loop (optional daemon-style periodic rebalance)
 loop:
-  enabled: false                # true = run repeatedly; requires trading.mode=auto to actually place orders
+  enabled: true                # true = run repeatedly; requires trading.mode=auto to actually place orders
   interval_minutes: 30          # Sleep duration between cycles when loop.enabled=true
 
 # Account filtering (by description)

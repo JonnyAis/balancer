@@ -1,40 +1,62 @@
-Automated portfolio rebalancer for E*TRADE accounts. It constructs a target allocation across asset classes and generates/executes BUY/SELL orders to match target allocation as closely as possible.
+# Balancer — Automatic E*TRADE Portfolio Rebalancer
+> Keep your retirement accounts on-target—safely and automatically.
 
-### Credentials Setup
+Balancer connects to your E*TRADE accounts, computes trades to hit your target asset-class allocation, and (optionally) executes those trades.
+
+## Why I built this
+I wanted a simple, ETF-based rebalancer for my retirement accounts that didn’t require moving assets to a robo-advisor. I found the robo-advisers were charging way too much for simple ETF balancing, and doing infrequently (i.e., quarterly). I also needed a project to team myself python :) 
+
+## Features
+
+- **Configurable**: lets you choose your preferred ETFs, allocations, rebalance frequency, etc.
+- 🔒 **Safety-first**: `preview` → `confirm` → `auto`, plus a global kill switch.
+- 🔁 **Loop mode**: run on a schedule for hands-off upkeep.
+- 🧰 **Designed for non-taxable accounts** (401k/IRA). Taxable version (with tax-loss harvesting + multi-ticker diversity) is on the roadmap.
+
+> **DISCLAIMER**: This is personal finance software. This is not investing advice. Use at your own risk. Start in `preview` mode and test in the **E*TRADE sandbox** before enabling live trading.  
+> E*TRADE developer signup: https://developer.etrade.com/home
+
+---
+
+## Quick Start
+
+### 1) E*TRADE developer setup
+1. Create a developer account and app: **E*TRADE Developer** → “Register / Sign in” → create keys.  
+2. Get your **consumer key/secret** and enable the **sandbox** to test first.  
+   _Docs:_ https://developer.etrade.com/home
+
+### 2) Install
+```bash
+git clone https://github.com/JonnyAis/balancer.git
+cd balancer
+python -m venv .venv && source .venv/bin/activate    # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+
+### 3) Credentials Setup
 Preferred: set environment variables  
   ETRADE_CONSUMER_KEY=...  
   ETRADE_CONSUMER_SECRET=...  
 
-Fallback (local file):  
+Alternative: (local file):  
   1. Copy config_file_example.py to config_file.py  
   2. Add your real key/secret  
   3. Keep config_file.py untracked (already in .gitignore)  
 
-Never commit real credentials.
+Never commit real credentials! 
 
-## Quick Start
-1. Copy credentials (see credentials_example) and authenticate once.
-2. Edit `balancer/config.yaml` (targets + trading.mode).
-3. Dry run (plan only):
-   ```
-   python -m balancer.main
-   ```
-4. Confirm mode:
-   - Set `trading.mode: confirm` in config.
-   - Run and answer `y` to execute.
-5. Fully automatic:
-   - Set `trading.mode: auto`
-   - (Optional) enable loop for periodic execution.
+### 4) Configure Balancer 
+Edit `balancer/config.yaml` with your preferences
 
-## Configuration Reference (config.yaml)
-
-### classes
-Defines target percentage of total account value (including cash) and the single ETF (preferred_symbol) used to represent each class.
+### asset classes
+Defines target percentage of total account value (including cash) and the single ETF (preferred_symbol) used to represent each class. The below is the default but modify to your preferences. 
 
 ```
 classes:
   Large: { target_percent: 40, preferred_symbol: VOO }
-```
+  Large: { target_percent: 12, preferred_symbol: VOO }
+  Intl:  { target_percent: 28, preferred_symbol: IXUS }
+  Bonds: { target_percent: 20, preferred_symbol: BND }```
 
 ### rebalance
 Heuristic thresholds and the integer optimizer settings.
