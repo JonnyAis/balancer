@@ -238,64 +238,162 @@ def _aggregate_classes(plan, targets):
     rows.sort(key=lambda x: x["class"])
     return rows, totals
 
-def _print_plan(plan, detailed=False, verbose=False, targets=None):
+def _print_plan(plan, detailed=True, verbose=False, targets=None):
     """
-    Print standard summary; if detailed=True per-account class table;
-    if verbose=True also aggregate a global before/after view.
+    Print rebalance plan with optimized information density.
+    detailed: Show per-account allocation tables (default True)  
+    verbose: Show global aggregation + RMS metrics (env var controlled)
     """
-    print("\n================ REBALANCE PLAN ================")
-    gross_sells = gross_buys = 0.0
-    trade_count = 0
-
+    print("\n" + "="*60)
+    print("REBALANCE PLAN".center(60))
+    print("="*60)
+    
+    total_trades = 0
+    total_turnover = 0.0
+    
     for acct in plan["accounts"]:
         f = acct["funding"]
-        desc = acct.get("accountDesc") or acct["accountIdKey"]
-        print(f"\nAccount {desc} ({acct['accountIdKey']})  Value={acct['accountValue']}  Cash={f['cash_now']}")
-        print(f"  Sells ({len(acct['sells'])}) total={f['sells_total']}")
+        desc = acct.get("accountDesc", "Unknown")
+        val = f"${acct['accountValue']:,.0f}"
+        cash = f"${f['cash_now']:,.0f}"
+        
+        print(f"\n🏦 {desc} ({acct['accountIdKey']})  Value={val}  Cash={cash}")
+        
+        if detailed and acct.get("class_rows"):
+            print("\n┌─────────┬─────┬────────┬───────┬───────┬─────┬─────────┬─────────┬─────────┬────────┬────────┐")
+            print("│ Class   │ Sym │ Target │ CurSh │ NewSh │ ΔSh │ CurVal  │ NewVal  │ ΔVal    │ CurWt% │ NewWt% │")
+            print("├─────────┼─────┼────────┼───────┼───────┼─────┼─────────┼─────────┼─────────┼────────┼────────┤")
+            
+            for r in acct["class_rows"]:
+                delta_sh = f"{r['delta_shares']:+d}" if r['delta_shares'] != 0 else "0"
+                delta_val = f"${r['delta_value']:+,.0f}" if r['delta_value'] != 0 else "$0"
+                
+                print(f"│ {r['class']:<7} │ {r['symbol']:<3} │ {r['target_pct']:>5.1f}% │"
+                      f" {r['current_shares']:>5} │ {r['new_shares']:>5} │ {delta_sh:>3} │"
+                      f" ${r['current_value']:>6,.0f} │ ${r['new_value']:>6,.0f} │ {delta_val:>7} │"
+                      f" {r['current_weight_pct']:>5.1f}% │ {r['new_weight_pct']:>5.1f}% │")
+            
+            print("└─────────┴─────┴────────┴───────┴───────┴─────┴─────────┴─────────┴─────────┴────────┴────────┘")
+        
+        # Compact trade summary
+        trades_summary = []
         for s in acct["sells"]:
-            print(f"    SELL {s['quantity']} {s['symbol']} ~{s['est_notional']}")
-            gross_sells += s['est_notional']; trade_count += 1
-        print(f"  Buys  ({len(acct['buys'])}) total={f['buys_total']} funding_status={f['funding_status']}")
+            trades_summary.append(f"SELL {s['quantity']} {s['symbol']} (~${s['est_notional']:,.0f})")
+            total_turnover += s['est_notional']
+            total_trades += 1
+            
         for b in acct["buys"]:
-            print(f"    BUY  {b['quantity']} {b['symbol']} ~{b['est_notional']}")
-            gross_buys += b['est_notional']; trade_count += 1
-        if f["funding_status"] == "unfunded":
-            print("    NOTE: Buys exceed cash + projected sell proceeds.")
-
-        if detailed:
-            rows = acct.get("class_rows", [])
-            if rows:
-                print("  Allocation Table:")
-                hdr = ("    Class  Sym   Target%  CurSh  NewSh  ΔSh  CurVal    NewVal    ΔVal    CurWt%  NewWt%")
-                print(hdr)
-                for r in rows:
-                    print(f"    {r['class']:<6} {r['symbol']:<4} "
-                          f"{r['target_pct']:>7.2f}  "
-                          f"{r['current_shares']:>5}  {r['new_shares']:>5}  "
-                          f"{r['delta_shares']:>3}  "
-                          f"{r['current_value']:>7.2f}  {r['new_value']:>7.2f}  "
-                          f"{r['delta_value']:>7.2f}  "
-                          f"{r['current_weight_pct']:>6.2f}  {r['new_weight_pct']:>6.2f}")
-
-    print(f"\n[Summary] Trades={trade_count} GrossTurnover=${round(gross_sells + gross_buys,2)} "
-          f"(Sells=${round(gross_sells,2)} Buys=${round(gross_buys,2)})")
-
+            trades_summary.append(f"BUY {b['quantity']} {b['symbol']} (~${b['est_notional']:,.0f})")
+            total_turnover += b['est_notional']  
+            total_trades += 1
+        
+        if trades_summary:
+            print(f"\n📋 Trades: {' • '.join(trades_summary)}")
+            
+            # Funding status
+            buys_total = f["buys_total"]
+            sells_total = f["sells_total"] 
+            cash_now = f["cash_now"]
+            
+            status = "✓ Sufficient" if f["funding_status"] == "funded" else "⚠ Insufficient"
+            print(f"💰 Funding: ${buys_total:,.0f} buys funded by ${sells_total:,.0f} sells + ${cash_now:,.0f} cash = {status}")
+        else:
+            print("📋 No trades needed")
+    
+    # Global summary
     if verbose and targets:
         agg_rows, totals = _aggregate_classes(plan, targets)
-        print("\n--- Global Allocation (Aggregated Across All Accounts) ---")
-        print(f"TotalCurrent=${totals['total_current_value']}  TotalNew=${totals['total_new_value']}  "
-              f"RMS Drift Before={totals['rms_before']} After={totals['rms_after']} "
-              f"Improvement={totals['rms_improvement']}")
-        hdr = ("Class   Target%  CurVal     NewVal     ΔVal       CurWt%    NewWt%    ΔWt%    NetAction NetShares")
-        print(hdr)
+        print(f"\n📊 Global Summary: {total_trades} trades • ${total_turnover:,.0f} turnover")
+        print(f"   Drift: {totals['rms_before']:.2f}% → {totals['rms_after']:.2f}% RMS (Δ{totals['rms_improvement']:+.2f}%)")
+        
+        print("\n--- Global Allocation ---")
         for r in agg_rows:
-            print(f"{r['class']:<7} "
-                  f"{r['target_pct']:>7.2f}  "
-                  f"{r['current_value']:>9.2f}  {r['new_value']:>9.2f}  {r['delta_value']:>9.2f}  "
-                  f"{r['current_weight_pct']:>8.4f}  {r['new_weight_pct']:>8.4f}  {r['delta_weight_pct']:>7.4f}  "
-                  f"{r['net_action']:<9} {r['net_shares']:>8}")
+            action_icon = "🟢" if r['net_action'] == "BUY" else "🔴" if r['net_action'] == "SELL" else "⚪"
+            print(f"{action_icon} {r['class']:<7} {r['target_pct']:>5.1f}% target │"
+                  f" {r['current_weight_pct']:>5.1f}% → {r['new_weight_pct']:>5.1f}% │"
+                  f" {r['net_action']:<4} {abs(r['net_shares']):>3} shares")
+    else:
+        print(f"\n📊 Summary: {total_trades} trades • ${total_turnover:,.0f} turnover")
+    
+    print("\n" + "="*60 + "\n")
 
-    print("\n================================================\n")
+# Keep the existing _aggregate_classes function (it's already good):
+def _aggregate_classes(plan, targets):
+    """
+    Aggregate per-class current/new values & shares across all accounts.
+    Returns (rows, totals_dict)
+    """
+    agg = {}
+    for acct in plan["accounts"]:
+        for r in acct.get("class_rows", []):
+            cls = r["class"]
+            a = agg.setdefault(cls, {
+                "class": cls,
+                "target_pct": targets.get(cls, 0.0),
+                "current_value": 0.0,
+                "new_value": 0.0,
+                "current_shares": 0,
+                "new_shares": 0
+            })
+            a["current_value"] += r["current_value"]
+            a["new_value"] += r["new_value"]
+            a["current_shares"] += r["current_shares"]
+            a["new_shares"] += r["new_shares"]
+
+    total_current = sum(v["current_value"] for v in agg.values())
+    total_new = sum(v["new_value"] for v in agg.values())
+
+    rows = []
+    for cls, v in agg.items():
+        cur_w = (v["current_value"] / total_current * 100) if total_current > 0 else 0
+        new_w = (v["new_value"] / total_new * 100) if total_new > 0 else 0
+        delta_w = new_w - cur_w
+        delta_val = v["new_value"] - v["current_value"]
+        net_shares = v["new_shares"] - v["current_shares"]
+        if net_shares > 0: action = "BUY"
+        elif net_shares < 0: action = "SELL"
+        else: action = "HOLD"
+        rows.append({
+            "class": cls,
+            "target_pct": v["target_pct"],
+            "current_value": round(v["current_value"], 2),
+            "new_value": round(v["new_value"], 2),
+            "delta_value": round(delta_val, 2),
+            "current_weight_pct": round(cur_w, 4),
+            "new_weight_pct": round(new_w, 4),
+            "delta_weight_pct": round(delta_w, 4),
+            "net_shares": net_shares,
+            "net_action": action
+        })
+
+    # Drift metrics (RMS deviation from target)
+    import math
+    def rms(values, key):
+        if not values:
+            return 0.0
+        s = 0.0
+        n = 0
+        for r in values:
+            tgt = r["target_pct"]
+            if tgt is None:
+                continue
+            s += (r[key] - tgt) ** 2
+            n += 1
+        return math.sqrt(s / n) if n else 0.0
+
+    rms_before = rms(rows, "current_weight_pct")
+    rms_after = rms(rows, "new_weight_pct")
+
+    totals = {
+        "total_current_value": round(total_current, 2),
+        "total_new_value": round(total_new, 2),
+        "rms_before": round(rms_before, 4),
+        "rms_after": round(rms_after, 4),
+        "rms_improvement": round(rms_before - rms_after, 4)
+    }
+    # Sort rows by class name for stable output
+    rows.sort(key=lambda x: x["class"])
+    return rows, totals
 
 def _prompt_user_confirm(plan):
     total_sells = 0.0
@@ -341,7 +439,6 @@ def _one_cycle(cfg):
     # Hardcoded sensible defaults for removed parameters
     allow_scale = True          # Always allow scaling buys if insufficient cash
     max_orders_per_acct = 20    # Reasonable safety limit
-    price_type = "MARKET"       # Only supported type anyway
 
     print(f"[CycleInit] Mode={mode} Sandbox={sandbox} Optimizer={use_int_opt}")
 
@@ -478,8 +575,9 @@ def _one_cycle(cfg):
     print(f"[CycleSummary] Aggregate value: {round(total_val_all,2)}")
 
     # Plan (detailed view)
-    show_detailed = os.getenv("REBALANCER_DETAILED_PLAN") == "1"
-    verbose = os.getenv("REBALANCER_VERBOSE_PLAN") == "1"
+    show_detailed = True  # Always show allocation table (was env var)
+    show_verbose = os.getenv("REBALANCER_VERBOSE_PLAN") == "1"  # Global aggregation optional
+    
     plan = _generate_plan(
         results,
         client,
@@ -490,9 +588,10 @@ def _one_cycle(cfg):
         {cls: (targets[cls]["target_percent"] if isinstance(targets[cls], dict) else targets[cls]) for cls in targets},
         {cls: (targets[cls]["preferred_symbol"] if isinstance(targets[cls], dict) else mapping.get(cls)) for cls in targets}
     )
-    # Pass the targets dict (flat values) for verbose aggregation
-    flat_targets = {cls: (targets[cls]["target_percent"] if isinstance(targets[cls], dict) else targets[cls]) for cls in targets}
-    _print_plan(plan, detailed=show_detailed, verbose=verbose, targets=flat_targets)
+    # Print plan with optimized defaults
+    flat_targets = {cls: (targets[cls]["target_percent"] if isinstance(targets[cls], dict) else targets[cls]) 
+                   for cls in targets}
+    _print_plan(plan, detailed=show_detailed, verbose=show_verbose, targets=flat_targets)
 
     if mode == "preview":
         print("[Cycle] Mode=preview -> no execution.")
