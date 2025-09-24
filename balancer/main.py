@@ -260,9 +260,9 @@ def _print_plan(plan, detailed=True, verbose=False, targets=None):
         print(f"\n🏦 {desc} ({acct['accountIdKey']})  Value={val}  Cash={cash}")
         
         if detailed and acct.get("class_rows"):
-            print("\n┌─────────┬─────┬────────┬───────┬───────┬─────┬─────────┬─────────┬─────────┬────────┬────────┐")
-            print("│ Class   │ Sym │ Target │ CurSh │ NewSh │ ΔSh │ CurVal  │ NewVal  │ ΔVal    │ CurWt% │ NewWt% │")
-            print("├─────────┼─────┼────────┼───────┼───────┼─────┼─────────┼─────────┼─────────┼────────┼────────┤")
+            print("\n┌─────────┬──────┬────────┬───────┬───────┬─────┬─────────┬─────────┬─────────┬────────┬────────┐")
+            print("│ Class   │ Sym  │ Target │ CurSh │ NewSh │ ΔSh │ CurVal  │ NewVal  │ ΔVal    │ CurWt% │ NewWt% │")
+            print("├─────────┼──────┼────────┼───────┼───────┼─────┼─────────┼─────────┼─────────┼────────┼────────┤")
             
             for r in acct["class_rows"]:
                 delta_sh = f"{r['delta_shares']:+d}" if r['delta_shares'] != 0 else "0"
@@ -283,7 +283,7 @@ def _print_plan(plan, detailed=True, verbose=False, targets=None):
                       f" ${r['current_value']:>6,.0f} │ ${r['new_value']:>6,.0f} │ {delta_val:>7} │"
                       f" {r['current_weight_pct']:>5.1f}% │ {r['new_weight_pct']:>5.1f}% │")
             
-            print("└─────────┴─────┴────────┴───────┴───────┴─────┴─────────┴─────────┴─────────┴────────┴────────┘")
+            print("└─────────┴──────┴────────┴───────┴───────┴─────┴─────────┴─────────┴─────────┴────────┴────────┘")
         
         # Compact trade summary
         trades_summary = []
