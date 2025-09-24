@@ -542,7 +542,7 @@ def _one_cycle(cfg):
                 turnover_penalty=opt_turnover_penalty,
                 min_notional_trade=min_notional,
                 account_min_turnover=account_min_turnover,
-                cash_buffer=opt_cash_buffer
+                cash_buffer=cash_buffer  # Change from opt_cash_buffer to cash_buffer
             )
         else:
             # Heuristic path
