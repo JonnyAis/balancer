@@ -34,11 +34,14 @@ accounts:
 
 # Trading / execution control
 trading:
-  # mode:
+  # mode:  # .env
+  ETRADE_CONSUMER_KEY=your_new_key_here
+  ETRADE_CONSUMER_SECRET=your_new_secret_here
+  ETRADE_SANDBOX=false
   #   preview = show plan only (no orders)
   #   confirm = show plan then interactive y/N prompt before executing
   #   auto    = show plan then execute immediately (needed for unattended loop)
-  mode: confirm
+  mode: auto
 
   max_orders_per_account: 20    # Hard cap on number of orders per account per run (prevents runaway)
   price_type: MARKET            # Placeholder for future order types (currently only MARKET)

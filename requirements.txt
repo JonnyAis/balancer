@@ -1,3 +1,4 @@
 rauth
 pandas
-PyYAML
+PyYAML  
+python-dotenv

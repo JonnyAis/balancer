@@ -41,14 +41,12 @@ pip install -r requirements.txt
 ```
 
 ### 3. Credentials
-Preferred (environment variables):
+
+**Create a .env file** (copy from template):
+```bash
+cp .env.example .env
+# Edit the newly created .env file with your E*TRADE developer key and secret.
 ```
-ETRADE_CONSUMER_KEY=...
-ETRADE_CONSUMER_SECRET=...
-```
-Alternative (local file you do NOT commit):
-- Copy `credentials_example` to `credentials.py`
-- Insert key/secret (file is in .gitignore)
 
 ### 4. Configure
 Edit `balancer/config.yaml` (targets, optimizer, trading mode, filters).
