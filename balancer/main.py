@@ -326,15 +326,22 @@ def _one_cycle(cfg):
     sandbox = os.getenv("ETRADE_SANDBOX", "false").lower() == "true"
     mode = str(trading.get("mode","preview")).lower()
 
-    # Integer optimizer config
-    opt_cfg = (rb.get("integer_optimizer") or {}) if isinstance(rb, dict) else {}
-    use_int_opt = bool(opt_cfg.get("enabled", False))
-    opt_window = int(opt_cfg.get("window", 4))
-    opt_turnover_penalty = float(opt_cfg.get("turnover_penalty", 0.0))
-    opt_cash_buffer = float(opt_cfg.get("cash_buffer", 0.0))
+    # Simplified rebalance parameters with sensible defaults
+    min_drift = float(rb.get("min_percent_drift", 0.1))
+    min_notional = float(rb.get("min_notional_trade", 100))
+    max_notional_trade = float(rb.get("max_notional_trade", 0)) or None
+    account_min_turnover = float(rb.get("account_min_turnover", 200))
+    cash_buffer = float(rb.get("cash_buffer", 0))
 
-    allow_scale = bool(trading.get("allow_partial_funding_scale", True))
-    max_orders_per_acct = int(trading.get("max_orders_per_account", 20))
+    # Integer optimizer always enabled with smart defaults
+    use_int_opt = True
+    opt_window = 4
+    opt_turnover_penalty = 0.0
+
+    # Hardcoded sensible defaults for removed parameters
+    allow_scale = True          # Always allow scaling buys if insufficient cash
+    max_orders_per_acct = 20    # Reasonable safety limit
+    price_type = "MARKET"       # Only supported type anyway
 
     print(f"[CycleInit] Mode={mode} Sandbox={sandbox} Optimizer={use_int_opt}")
 

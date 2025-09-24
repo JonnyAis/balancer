@@ -7,20 +7,13 @@ classes:
   International: { target_percent: 28, preferred_symbol: IXUS }
   Bonds:         { target_percent: 20, preferred_symbol: BND }
 
-# Rebalancing / allocation parameters
+# Rebalancing parameters
 rebalance:
-  # Heuristic engine thresholds (mostly ignored when integer optimizer enabled):
-  min_percent_drift: 0.1        # Ignore drifts smaller than this percent (per class); 0.0 = disabled
-  min_notional_trade: 100       # Skip any single trade smaller than this dollar amount
-  max_notional_trade: 10000     # Cap any single trade notional; 0 or large number = no cap
-  account_min_turnover: 200       # Require at least this aggregate $ (buys + sells) or skip the account
-
-  # Integer (whole-share) optimizer (enumeration) — replaces heuristic when enabled.
-  integer_optimizer:
-    enabled: true               # true = use global integer allocation; false = use heuristic drift logic
-    window: 8                   # Share search window: explores (target_shares - window) .. (target_shares + window)
-    turnover_penalty: 0.0       # Adds (penalty * total absolute share changes) to objective; >0 reduces churn
-    cash_buffer: 0.0            # Leave at least this much cash unallocated (per account)
+  min_percent_drift: 0.1        # Only rebalance if class drifts >0.1% from target
+  min_notional_trade: 100       # Don't make trades smaller than $100
+  max_notional_trade: 10000     # Cap individual trades at $10,000 (0 = no limit)
+  account_min_turnover: 200     # Skip account unless total trading >$200
+  cash_buffer: 0                # Keep this much uninvested per account
 
 # Background loop (optional daemon-style periodic rebalance)
 loop:
@@ -34,15 +27,8 @@ accounts:
 
 # Trading / execution control
 trading:
-  # mode:  # .env
-  ETRADE_CONSUMER_KEY=your_new_key_here
-  ETRADE_CONSUMER_SECRET=your_new_secret_here
-  ETRADE_SANDBOX=false
+  # mode:
   #   preview = show plan only (no orders)
   #   confirm = show plan then interactive y/N prompt before executing
   #   auto    = show plan then execute immediately (needed for unattended loop)
   mode: auto
-
-  max_orders_per_account: 20    # Hard cap on number of orders per account per run (prevents runaway)
-  price_type: MARKET            # Placeholder for future order types (currently only MARKET)
-  allow_partial_funding_scale: true  # If true and post-sell cash < planned buys, scale buys down; false = drop buys
