@@ -268,7 +268,14 @@ def _print_plan(plan, detailed=True, verbose=False, targets=None):
                 delta_sh = f"{r['delta_shares']:+d}" if r['delta_shares'] != 0 else "0"
                 delta_val = f"${r['delta_value']:+,.0f}" if r['delta_value'] != 0 else "$0"
                 
-                print(f"│ {r['class']:<7} │ {r['symbol']:<3} │ {r['target_pct']:>5.1f}% │"
+                # Abbreviate long class names for better table formatting
+                class_name = r['class']
+                if class_name.lower() == 'international':
+                    class_name = 'Intl'
+                elif len(class_name) > 7:
+                    class_name = class_name[:7]  # Truncate any other long names
+                
+                print(f"│ {class_name:<7} │ {r['symbol']:<3} │ {r['target_pct']:>5.1f}% │"
                       f" {r['current_shares']:>5} │ {r['new_shares']:>5} │ {delta_sh:>3} │"
                       f" ${r['current_value']:>6,.0f} │ ${r['new_value']:>6,.0f} │ {delta_val:>7} │"
                       f" {r['current_weight_pct']:>5.1f}% │ {r['new_weight_pct']:>5.1f}% │")
@@ -309,7 +316,15 @@ def _print_plan(plan, detailed=True, verbose=False, targets=None):
         print("\n--- Global Allocation ---")
         for r in agg_rows:
             action_icon = "🟢" if r['net_action'] == "BUY" else "🔴" if r['net_action'] == "SELL" else "⚪"
-            print(f"{action_icon} {r['class']:<7} {r['target_pct']:>5.1f}% target │"
+            
+            # Abbreviate class names here too
+            class_name = r['class']
+            if class_name.lower() == 'international':
+                class_name = 'Intl'
+            elif len(class_name) > 7:
+                class_name = class_name[:7]
+                
+            print(f"{action_icon} {class_name:<7} {r['target_pct']:>5.1f}% target │"
                   f" {r['current_weight_pct']:>5.1f}% → {r['new_weight_pct']:>5.1f}% │"
                   f" {r['net_action']:<4} {abs(r['net_shares']):>3} shares")
     else:
