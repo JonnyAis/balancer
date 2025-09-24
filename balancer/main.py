@@ -275,7 +275,10 @@ def _print_plan(plan, detailed=True, verbose=False, targets=None):
                 elif len(class_name) > 7:
                     class_name = class_name[:7]  # Truncate any other long names
                 
-                print(f"│ {class_name:<7} │ {r['symbol']:<3} │ {r['target_pct']:>5.1f}% │"
+                # Ensure symbol is always 4 characters wide
+                symbol = f"{r['symbol']:<4}"
+                
+                print(f"│ {class_name:<7} │ {symbol} │ {r['target_pct']:>5.1f}% │"
                       f" {r['current_shares']:>5} │ {r['new_shares']:>5} │ {delta_sh:>3} │"
                       f" ${r['current_value']:>6,.0f} │ ${r['new_value']:>6,.0f} │ {delta_val:>7} │"
                       f" {r['current_weight_pct']:>5.1f}% │ {r['new_weight_pct']:>5.1f}% │")
