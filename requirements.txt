@@ -2,3 +2,4 @@ rauth
 pandas
 PyYAML  
 python-dotenv
+tabulate

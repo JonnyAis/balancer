@@ -1,34 +1,31 @@
-# filepath: c:\Users\jonat\OneDrive\Documents\GitHub\balancer\balancer\config.yaml
-# Target portfolio: each asset class has a target_percent (of total acct value incl. cash)
-# and a single preferred_symbol (ETF) the allocator will hold for that class.
-classes:
-  Large:         { target_percent: 40, preferred_symbol: VOO }
-  Small:         { target_percent: 12, preferred_symbol: VBR }
-  International: { target_percent: 28, preferred_symbol: IXUS }
-  Bonds:         { target_percent: 20, preferred_symbol: BND }
-
-# Rebalancing parameters
-rebalance:
-  min_percent_drift: 0.1        # Only rebalance if class drifts >0.1% from target
-  min_notional_trade: 100       # Don't make trades smaller than $100
-  max_notional_trade: 10000     # Cap individual trades at $10,000 (0 = no limit)
-  account_min_turnover: 200     # Skip account unless total trading >$200
-  cash_buffer: 0                # Keep this much uninvested per account
-
-# Background loop (optional daemon-style periodic rebalance)
-loop:
-  enabled: true                # true = run repeatedly; requires trading.mode=auto to actually place orders
-  interval_minutes: 30          # Sleep duration between cycles when loop.enabled=true
-
-# Account filtering (by description)
 accounts:
-  exclude_if_desc_contains: ["brokerage"]  # Skip any account whose description contains any of these substrings (case-insensitive)
-  include_only_descriptions: []            # If non-empty, ONLY include accounts whose description exactly matches one of these (case-insensitive). Empty = disabled.
-
-# Trading / execution control
+  exclude_if_desc_contains:
+  - brokerage
+  include_only_descriptions: []
+classes:
+  Bonds:
+    preferred_symbol: BND
+    target_percent: 20
+  International:
+    preferred_symbol: IXUS
+    target_percent: 28
+  Large:
+    preferred_symbol: VOO
+    target_percent: 40
+  Small:
+    preferred_symbol: VBR
+    target_percent: 12
+loop:
+  enabled: true
+  interval_minutes: 30
+rebalance:
+  account_min_turnover: 200
+  cash_buffer: 0
+  integer_optimizer:
+    turnover_penalty: 0.0
+    window: 4
+  max_notional_trade: 10000
+  min_notional_trade: 100
+  min_percent_drift: 0.1
 trading:
-  # mode:
-  #   preview = show plan only (no orders)
-  #   confirm = show plan then interactive y/N prompt before executing
-  #   auto    = show plan then execute immediately (needed for unattended loop)
-  mode: auto
+  mode: confirm

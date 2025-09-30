@@ -8,17 +8,42 @@ from .optimizer import optimize_integer_portfolio  # ADD THIS import
 import traceback
 import sys
 import time
+import webbrowser  # Used in auth.py but imported there
+from tabulate import tabulate
 
 def load_config():
     base_dir = os.path.dirname(__file__)
     path = os.path.join(base_dir, "config.yaml")
     if not os.path.exists(path):
         raise FileNotFoundError("config.yaml not found.")
+    
     with open(path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f) or {}
+    
     classes = cfg.get("classes", {})
-    targets = {k: v["target_percent"] for k, v in classes.items()}
-    mapping = {k: v["preferred_symbol"] for k, v in classes.items()}
+    
+    # Extract and validate targets/mapping
+    targets = {}
+    mapping = {}
+    
+    for class_name, class_config in classes.items():
+        if not isinstance(class_config, dict):
+            raise ValueError(f"Class '{class_name}' must have 'target_percent' and 'preferred_symbol' fields")
+        
+        target_percent = class_config.get("target_percent")
+        preferred_symbol = class_config.get("preferred_symbol")
+        
+        if target_percent is None or preferred_symbol is None:
+            raise ValueError(f"Class '{class_name}' missing required fields")
+        
+        targets[class_name] = float(target_percent)
+        mapping[class_name] = str(preferred_symbol).upper()
+    
+    # Validate targets sum to 100%
+    total_target = sum(targets.values())
+    if abs(total_target - 100.0) > 0.01:
+        raise ValueError(f"Target percentages must sum to 100.0%, got {total_target:.2f}%")
+    
     return {
         "targets": targets,
         "mapping": mapping,
@@ -260,30 +285,30 @@ def _print_plan(plan, detailed=True, verbose=False, targets=None):
         print(f"\n🏦 {desc} ({acct['accountIdKey']})  Value={val}  Cash={cash}")
         
         if detailed and acct.get("class_rows"):
-            print("\n┌─────────┬──────┬────────┬───────┬───────┬─────┬─────────┬─────────┬─────────┬────────┬────────┐")
-            print("│ Class   │ Sym  │ Target │ CurSh │ NewSh │ ΔSh │ CurVal  │ NewVal  │ ΔVal    │ CurWt% │ NewWt% │")
-            print("├─────────┼──────┼────────┼───────┼───────┼─────┼─────────┼─────────┼─────────┼────────┼────────┤")
-            
+            # Prepare table data
+            table_data = []
             for r in acct["class_rows"]:
-                delta_sh = f"{r['delta_shares']:+d}" if r['delta_shares'] != 0 else "0"
-                delta_val = f"${r['delta_value']:+,.0f}" if r['delta_value'] != 0 else "$0"
-                
-                # Abbreviate long class names for better table formatting
                 class_name = r['class']
                 if class_name.lower() == 'international':
                     class_name = 'Intl'
                 elif len(class_name) > 7:
-                    class_name = class_name[:7]  # Truncate any other long names
-                
-                # Ensure symbol is always 4 characters wide
-                symbol = f"{r['symbol']:<4}"
-                
-                print(f"│ {class_name:<7} │ {symbol} │ {r['target_pct']:>5.1f}% │"
-                      f" {r['current_shares']:>5} │ {r['new_shares']:>5} │ {delta_sh:>3} │"
-                      f" ${r['current_value']:>6,.0f} │ ${r['new_value']:>6,.0f} │ {delta_val:>7} │"
-                      f" {r['current_weight_pct']:>5.1f}% │ {r['new_weight_pct']:>5.1f}% │")
-            
-            print("└─────────┴──────┴────────┴───────┴───────┴─────┴─────────┴─────────┴─────────┴────────┴────────┘")
+                    class_name = class_name[:7]
+                symbol = r['symbol']
+                table_data.append([
+                    class_name,
+                    symbol,
+                    f"{r['target_pct']:>5.1f}%",
+                    r['current_shares'],
+                    r['new_shares'],
+                    f"{r['delta_shares']:+d}",
+                    f"${r['current_value']:,.0f}",
+                    f"${r['new_value']:,.0f}",
+                    f"${r['delta_value']:+,.0f}",
+                    f"{r['current_weight_pct']:>5.1f}%",
+                    f"{r['new_weight_pct']:>5.1f}%"
+                ])
+            headers = ["Class", "Sym", "Target", "CurSh", "NewSh", "ΔSh", "CurVal", "NewVal", "ΔVal", "CurWt%", "NewWt%"]
+            print(tabulate(table_data, headers=headers, tablefmt="fancy_grid"))
         
         # Compact trade summary
         trades_summary = []
@@ -300,13 +325,8 @@ def _print_plan(plan, detailed=True, verbose=False, targets=None):
         if trades_summary:
             print(f"\n📋 Trades: {' • '.join(trades_summary)}")
             
-            # Funding status
-            buys_total = f["buys_total"]
-            sells_total = f["sells_total"] 
-            cash_now = f["cash_now"]
-            
-            status = "✓ Sufficient" if f["funding_status"] == "funded" else "⚠ Insufficient"
-            print(f"💰 Funding: ${buys_total:,.0f} buys funded by ${sells_total:,.0f} sells + ${cash_now:,.0f} cash = {status}")
+            # Remove the confusing funding message entirely
+            # Users understand that sells fund buys - no need to over-explain
         else:
             print("📋 No trades needed")
     
@@ -320,7 +340,6 @@ def _print_plan(plan, detailed=True, verbose=False, targets=None):
         for r in agg_rows:
             action_icon = "🟢" if r['net_action'] == "BUY" else "🔴" if r['net_action'] == "SELL" else "⚪"
             
-            # Abbreviate class names here too
             class_name = r['class']
             if class_name.lower() == 'international':
                 class_name = 'Intl'
@@ -435,37 +454,27 @@ def _prompt_user_confirm(plan):
 def _one_cycle(cfg):
     targets = cfg["targets"]
     mapping = cfg["mapping"]
-    rb = cfg["rebalance"]
-    trading = cfg["trading"]
-    acct_cfg = cfg["accounts"]
-
+    
+    # Get settings from config and environment
+    rebalance_cfg = cfg.get("rebalance", {})
+    opt_cfg = rebalance_cfg.get("integer_optimizer", {})
+    trading_cfg = cfg.get("trading", {})
+    acct_cfg = cfg.get("accounts", {})
+    
+    # Get mode and sandbox from environment (set by run.py)
+    mode = os.getenv("TRADING_MODE", "preview").lower()
     sandbox = os.getenv("ETRADE_SANDBOX", "false").lower() == "true"
-    mode = str(trading.get("mode","preview")).lower()
-
-    # Simplified rebalance parameters with sensible defaults
-    min_drift = float(rb.get("min_percent_drift", 0.1))
-    min_notional = float(rb.get("min_notional_trade", 100))
-    max_notional_trade = float(rb.get("max_notional_trade", 0)) or None
-    account_min_turnover = float(rb.get("account_min_turnover", 200))
-    cash_buffer = float(rb.get("cash_buffer", 0))
-
-    # Integer optimizer always enabled with smart defaults
-    use_int_opt = True
-    opt_window = 4
-    opt_turnover_penalty = 0.0
-
-    # Hardcoded sensible defaults for removed parameters
-    allow_scale = True          # Always allow scaling buys if insufficient cash
-    max_orders_per_acct = 20    # Reasonable safety limit
-
-    print(f"[CycleInit] Mode={mode} Sandbox={sandbox} Optimizer={use_int_opt}")
+    
+    # Get other settings from config
+    max_orders_per_acct = 20  # Could move to config if needed
+    allow_scale = True        # Could move to config if needed
+    
+    print(f"[CycleInit] Mode={mode} Sandbox={sandbox} Optimizer=True")
 
     interactive = mode != "auto"
-    session = get_session(sandbox, interactive=interactive, mode=mode)
-    if session is None and os.getenv("FORCE_ONE_INTERACTIVE") == "1" and sys.stdin.isatty():
-        print("[Cycle] FORCE_ONE_INTERACTIVE=1 -> attempting interactive auth once.")
-        session = get_session(sandbox, interactive=True, mode=mode)
-
+    session = get_session(sandbox, interactive=interactive)
+    # Remove the FORCE_ONE_INTERACTIVE check since we removed that env var
+    
     if session is None:
         print("[Cycle] No session (auth unavailable). Skipping this cycle.")
         return
@@ -513,26 +522,51 @@ def _one_cycle(cfg):
             print(f"[Err] Positions parse fail {k}: {e}")
             acct_positions[k] = None
 
-    # Prices (unique symbols from mapping)
+    # Prices (unique symbols from mapping) - UPDATED
     symbols = list({mapping[c] for c in mapping if mapping[c]})
-    quotes = client.quotes(symbols)
-    prices = {sym: q.get("lastPrice") or q.get("close") or 0 for sym, q in quotes.items()}
+    quotes_dict = client.quotes(symbols)  # Now returns dict instead of DataFrame
+    
+    # Extract prices from the quotes dict
+    prices = {}
+    for sym in symbols:
+        quote_data = quotes_dict.get(sym, {})
+        price = quote_data.get("lastPrice") or quote_data.get("last") or quote_data.get("close") or 0
+        prices[sym] = float(price) if price > 0 else 0
+        if price == 0:
+            print(f"[Prices] Warning: Zero price for {sym}")
+    
+    print(f"[Prices] Retrieved: {prices}")  # Debug output
 
-    # Thresholds (heuristic)
-    min_drift = float(rb.get("min_percent_drift", 0.5))
-    min_notional = float(rb.get("min_notional_trade", 100))
-    max_notional_trade = float(rb.get("max_notional_trade", 0)) or None
-    account_min_turnover = float(rb.get("account_min_turnover", 0))
-
-    # Build trades per account
+    # Convert dict to DataFrame format that rebalance.py expects
+    quotes_data = []
+    for sym in symbols:
+        quote_data = quotes_dict.get(sym, {})
+        price = quote_data.get("lastPrice") or quote_data.get("last") or quote_data.get("close") or 0
+        
+        # Add to quotes_data for DataFrame creation
+        quotes_data.append({
+            "symbol": sym,
+            "last": price,
+            "lastPrice": price,
+            "close": price
+        })
+    
+    # Create DataFrame that rebalance.py expects
+    quotes_df = pd.DataFrame(quotes_data)
+    if not quotes_df.empty:
+        quotes_df.set_index("symbol", inplace=True)
+    
+    # Build optimizer inputs per account
     results = []
     total_val_all = 0.0
     for k in acct_keys:
         pos_df = acct_positions.get(k)
-        if pos_df is None:
-            results.append({"accountIdKey": k, "accountValue": 0.0, "trades": []})
+        if pos_df is None or pos_df.empty:
             continue
-        weights, invested_total = current_weights(pos_df, quotes, {mapping[c]: c for c in mapping})
+
+        # Current weights (pass DataFrame as expected) - MOVED INSIDE THE LOOP
+        weights, invested_total = current_weights(pos_df, quotes_df, {mapping[c]: c for c in mapping})
+
         bal = client.balance(k, account_id_lookup.get(k))
         cash_now = float(bal.get("cash", 0.0))
         total_account_value = invested_total + cash_now
@@ -546,43 +580,19 @@ def _one_cycle(cfg):
             except Exception:
                 current_shares[sym] = 0
 
-        if use_int_opt:
-            from .optimizer import optimize_integer_portfolio
-            trades = optimize_integer_portfolio(
-                targets_pct={cls: targets[cls]["target_percent"] if isinstance(targets[cls], dict) else targets[cls]
-                             for cls in targets},
-                prices=prices,
-                class_to_symbol={cls: targets[cls]["preferred_symbol"] if isinstance(targets[cls], dict) else mapping.get(cls)
-                                 for cls in targets},
-                current_shares=current_shares,
-                total_account_value=total_account_value,
-                window=opt_window,
-                turnover_penalty=opt_turnover_penalty,
-                min_notional_trade=min_notional,
-                account_min_turnover=account_min_turnover,
-                cash_buffer=cash_buffer  # Change from opt_cash_buffer to cash_buffer
-            )
-        else:
-            # Heuristic path
-            # Convert targets to the expected format for build_trades (target_percent and preferred symbol)
-            norm_targets = {cls: targets[cls]["target_percent"] if isinstance(targets[cls], dict) else targets[cls]
-                            for cls in targets}
-            symbol_map = {cls: targets[cls]["preferred_symbol"] if isinstance(targets[cls], dict) else mapping.get(cls)
-                          for cls in targets}
-            trades = build_trades(
-                norm_targets, weights, invested_total, prices, symbol_map,
-                min_drift=min_drift,
-                min_notional=min_notional,
-                max_notional_trade=max_notional_trade
-            )
-            turnover = sum(t["est_notional"] for t in trades)
-            if trades and turnover < account_min_turnover:
-                trades = []
-            # Remove buy-only set (if you still want that restriction in heuristic path)
-            sells = [t for t in trades if t["action"] == "SELL"]
-            buys = [t for t in trades if t["action"] == "BUY"]
-            if buys and not sells:
-                trades = []
+        # Always use integer optimizer (remove heuristic code path)
+        trades = optimize_integer_portfolio(
+            targets_pct=targets,
+            prices=prices,
+            class_to_symbol=mapping,
+            current_shares=current_shares,
+            total_account_value=total_account_value,
+            window=opt_cfg.get("window", 4),
+            turnover_penalty=opt_cfg.get("turnover_penalty", 0.0),
+            min_notional_trade=rebalance_cfg.get("min_notional_trade", 100),
+            account_min_turnover=rebalance_cfg.get("account_min_turnover", 200),
+            cash_buffer=rebalance_cfg.get("cash_buffer", 0)
+        )
 
         results.append({
             "accountIdKey": k,
@@ -593,8 +603,8 @@ def _one_cycle(cfg):
     print(f"[CycleSummary] Aggregate value: {round(total_val_all,2)}")
 
     # Plan (detailed view)
-    show_detailed = True  # Always show allocation table (was env var)
-    show_verbose = os.getenv("REBALANCER_VERBOSE_PLAN") == "1"  # Global aggregation optional
+    show_detailed = True
+    show_verbose = cfg.get("display", {}).get("verbose", False)  # Move to config if needed
     
     plan = _generate_plan(
         results,
@@ -603,13 +613,12 @@ def _one_cycle(cfg):
         account_desc_lookup,
         acct_positions,
         prices,
-        {cls: (targets[cls]["target_percent"] if isinstance(targets[cls], dict) else targets[cls]) for cls in targets},
-        {cls: (targets[cls]["preferred_symbol"] if isinstance(targets[cls], dict) else mapping.get(cls)) for cls in targets}
+        targets,  # Already in correct format
+        mapping   # Already in correct format
     )
+    
     # Print plan with optimized defaults
-    flat_targets = {cls: (targets[cls]["target_percent"] if isinstance(targets[cls], dict) else targets[cls]) 
-                   for cls in targets}
-    _print_plan(plan, detailed=show_detailed, verbose=show_verbose, targets=flat_targets)
+    _print_plan(plan, detailed=True, verbose=False, targets=targets)
 
     if mode == "preview":
         print("[Cycle] Mode=preview -> no execution.")

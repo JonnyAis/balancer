@@ -12,7 +12,10 @@ class ETradeClient:
     def __init__(self, session, sandbox: bool = False):
         self.session = session
         self.sandbox = sandbox
-        self.base_url = "https://apisb.etrade.com" if sandbox else "https://api.etrade.com"
+        if sandbox:
+            self.base_url = "https://apisb.etrade.com"  # Updated sandbox URL
+        else:
+            self.base_url = "https://api.etrade.com"   # Production URL
 
     def accounts(self) -> pd.DataFrame:
         resp = self.session.get(f"{self.base_url}/v1/accounts/list.json", params={"format": "json"})
@@ -40,31 +43,76 @@ class ETradeClient:
         except Exception:
             return {}
 
-    def quotes(self, symbols) -> pd.DataFrame:
+    def quotes(self, symbols) -> dict:  # Change return type from DataFrame to dict
         if not symbols:
-            return pd.DataFrame(columns=["last"])
+            return {}
+        
+        debug = os.getenv("REBALANCER_DEBUG_QUOTES") == "1"
+        
         sym_str = ",".join(symbols)
         resp = self.session.get(
             f"{self.base_url}/v1/market/quote/{sym_str}.json",
             params={"detailFlag": "FUNDAMENTAL", "format": "json"}
         )
+        
+        if debug:
+            print(f"[Quotes] Request: {resp.url}")
+            print(f"[Quotes] Status: {resp.status_code}")
+        
         try:
             j = resp.json()
-        except Exception:
-            return pd.DataFrame(columns=["last"])
+            if debug:
+                print(f"[Quotes] Raw response: {j}")
+        except Exception as e:
+            if debug:
+                print(f"[Quotes] JSON parse error: {e}")
+            return {}
+        
         qdata = j.get("QuoteResponse", {}).get("QuoteData", [])
-        rows = []
+        quotes_dict = {}
+        
         for q in qdata:
             try:
-                rows.append({
-                    "symbol": q["Product"]["symbol"],
-                    "last": q["Fundamental"]["lastTrade"]
-                })
-            except KeyError:
+                symbol = q["Product"]["symbol"]
+                
+                # Try multiple price sources (E*TRADE returns different fields)
+                price = None
+                price_sources = [
+                    ("Fundamental", "lastTrade"),      # During market hours
+                    ("All", "lastTrade"),              # Alternative path
+                    ("All", "previousClose"),          # After hours fallback
+                    ("Fundamental", "previousClose"),   # Another fallback
+                    ("All", "close"),                  # Legacy field
+                    ("lastPrice",),                    # Direct field
+                    ("close",),                        # Direct field
+                ]
+                
+                for source_path in price_sources:
+                    current = q
+                    try:
+                        for key in source_path:
+                            current = current[key]
+                        if isinstance(current, (int, float)) and current > 0:
+                            price = float(current)
+                            break
+                    except (KeyError, TypeError):
+                        continue
+                
+                if price and price > 0:
+                    quotes_dict[symbol] = {
+                        "lastPrice": price,
+                        "last": price,  # For backward compatibility
+                        "close": price
+                    }
+                else:
+                    print(f"[Quotes] Warning: No valid price found for {symbol}")
+                    quotes_dict[symbol] = {"lastPrice": 0, "last": 0, "close": 0}
+                    
+            except KeyError as e:
+                print(f"[Quotes] Error parsing quote for symbol: {e}")
                 continue
-        if not rows:
-            return pd.DataFrame(columns=["last"])
-        return pd.DataFrame(rows).set_index("symbol")
+        
+        return quotes_dict
 
     def balance(self, account_id_key: str, account_id_numeric: str = None) -> dict:
         """

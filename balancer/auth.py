@@ -7,41 +7,10 @@ _BASE_LIVE = "https://api.etrade.com"
 _BASE_SB = "https://apisb.etrade.com"
 _TOKENS_PATH = os.path.join(os.path.dirname(__file__), "tokens.json")
 
-def _load_creds():
-    # Load .env file if it exists
-    load_dotenv()
-    
-    key = os.getenv("ETRADE_CONSUMER_KEY")
-    sec = os.getenv("ETRADE_CONSUMER_SECRET")
-    
-    if key and sec:
-        return key, sec
-    
-    # Fallback to credentials.py for backward compatibility
-    try:
-        from . import credentials as pkg_creds
-        return pkg_creds.etrade_key, pkg_creds.etrade_secret
-    except Exception:
-        pass
-    
-    raise RuntimeError("Missing credentials: set ETRADE_CONSUMER_KEY and ETRADE_CONSUMER_SECRET in .env file or environment")
-
 def _mask(v: str) -> str:
     if not v:
         return "<missing>"
     return "*" * (len(v) - 4) + v[-4:]
-
-def _service(sandbox: bool, key: str, sec: str):
-    host = _BASE_SB if sandbox else _BASE_LIVE
-    return OAuth1Service(
-        name="etrade",
-        consumer_key=key,
-        consumer_secret=sec,
-        request_token_url=f"{host}/oauth/request_token",
-        access_token_url=f"{host}/oauth/access_token",
-        authorize_url="https://us.etrade.com/e/t/etws/authorize?key={}&token={}",
-        base_url=host,
-    )
 
 def _load_cached(sandbox: bool):
     if not os.path.exists(_TOKENS_PATH):
@@ -74,19 +43,119 @@ def _save_cached(sandbox: bool, token: str, token_secret: str):
     with open(_TOKENS_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
-def start_session(sandbox: bool):
-    key, sec = _load_creds()
-    svc = _service(sandbox, key, sec)
-    print(f"[Auth] Interactive flow env={'SANDBOX' if sandbox else 'LIVE'} key={_mask(key)}")
-    req_token, req_secret = svc.get_request_token(params={"oauth_callback": "oob", "format": "json"})
-    url = svc.authorize_url.format(svc.consumer_key, req_token)
-    webbrowser.open(url)
-    time.sleep(1)
-    verifier = input("Enter E*TRADE verifier: ").strip()
-    session = svc.get_auth_session(req_token, req_secret, params={"oauth_verifier": verifier})
-    _save_cached(sandbox, session.access_token, session.access_token_secret)
-    print("[Auth] Session established (cached).")
-    return session
+def get_credentials():
+    """
+    Get E*TRADE credentials based on sandbox setting.
+    Returns (consumer_key, consumer_secret, is_sandbox)
+    """
+    load_dotenv()
+    
+    # Determine if we're in sandbox mode
+    sandbox = os.getenv("ETRADE_SANDBOX", "false").lower() == "true"
+    
+    if sandbox:
+        # Use sandbox credentials
+        consumer_key = os.getenv("ETRADE_SANDBOX_CONSUMER_KEY")
+        consumer_secret = os.getenv("ETRADE_SANDBOX_CONSUMER_SECRET")
+        env_name = "SANDBOX"
+    else:
+        # Use production credentials
+        consumer_key = os.getenv("ETRADE_PROD_CONSUMER_KEY") 
+        consumer_secret = os.getenv("ETRADE_PROD_CONSUMER_SECRET")
+        env_name = "PRODUCTION"
+    
+    # Validate credentials exist
+    if not consumer_key or not consumer_secret:
+        missing_vars = []
+        if sandbox:
+            if not consumer_key: missing_vars.append("ETRADE_SANDBOX_CONSUMER_KEY")
+            if not consumer_secret: missing_vars.append("ETRADE_SANDBOX_CONSUMER_SECRET")
+        else:
+            if not consumer_key: missing_vars.append("ETRADE_PROD_CONSUMER_KEY")
+            if not consumer_secret: missing_vars.append("ETRADE_PROD_CONSUMER_SECRET")
+        
+        raise ValueError(f"Missing {env_name} credentials in .env file: {', '.join(missing_vars)}")
+    
+    print(f"[Auth] Using {env_name} credentials (key ending: ...{consumer_key[-4:]})")
+    
+    return consumer_key, consumer_secret, sandbox
+
+def start_session(sandbox_override=None):
+    """
+    Start an E*TRADE OAuth session with correct sandbox OAuth endpoints.
+    """
+    consumer_key, consumer_secret, is_sandbox = get_credentials()
+    
+    if is_sandbox:
+        request_token_url = "https://apisb.etrade.com/oauth/request_token"
+        access_token_url = "https://apisb.etrade.com/oauth/access_token"
+        base_url = "https://apisb.etrade.com"
+    else:
+        request_token_url = "https://api.etrade.com/oauth/request_token"
+        access_token_url = "https://api.etrade.com/oauth/access_token"
+        base_url = "https://api.etrade.com"
+    
+    # Use the correct authorization URL format from E*TRADE docs
+    authorize_url_template = "https://us.etrade.com/e/t/etws/authorize?key={}&token={}"
+    
+    svc = OAuth1Service(
+        name="etrade",
+        consumer_key=consumer_key,
+        consumer_secret=consumer_secret,
+        request_token_url=request_token_url,
+        access_token_url=access_token_url,
+        authorize_url="https://us.etrade.com/e/t/etws/authorize",  # OAuth1Service needs a base URL
+        base_url=base_url
+    )
+    
+    print(f"[Auth] Starting OAuth flow for {('SANDBOX' if is_sandbox else 'PRODUCTION')}")
+    print(f"[Auth] API base URL: {base_url}")
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            print(f"[Auth] Attempt {attempt + 1}/{max_retries}: Getting request token...")
+            req_token, req_secret = svc.get_request_token(params={"oauth_callback": "oob", "format": "json"})
+            print(f"[Auth] Request token: {req_token}")
+            
+            # Build the correct authorization URL format per E*TRADE docs
+            auth_url = authorize_url_template.format(consumer_key, req_token)
+            print(f"[Auth] Please visit: {auth_url}")
+            
+            # Auto-open browser
+            try:
+                webbrowser.open(auth_url)
+                print("[Auth] Opening browser automatically...")
+            except Exception:
+                print("[Auth] Could not auto-open browser, please copy URL manually")
+            
+            verifier = input(f"\n[Auth] Enter verification code (or 'retry' to get new token): ").strip()
+            
+            if verifier.lower() == 'retry':
+                print(f"[Auth] Retrying with new request token...")
+                continue
+                
+            if not verifier:
+                raise ValueError("No verification code provided")
+            
+            print(f"[Auth] Exchanging verification code for access token...")
+            session = svc.get_auth_session(req_token, req_secret, params={"oauth_verifier": verifier})
+            print("[Auth] Session established successfully")
+            
+            # Cache the successful token
+            if hasattr(session, 'access_token') and hasattr(session, 'access_token_secret'):
+                _save_cached(is_sandbox, session.access_token, session.access_token_secret)
+            
+            return session
+            
+        except Exception as e:
+            print(f"[Auth] OAuth attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                print(f"[Auth] Waiting 10 seconds before retry...")
+                time.sleep(10)
+            else:
+                print(f"[Auth] All attempts failed")
+                raise
 
 def refresh_session(sandbox: bool):
     """Force a new interactive session (clears cached token)."""
@@ -102,11 +171,29 @@ def renew_access_token(sandbox: bool, access_token: str, access_secret: str):
     Attempt silent renew (E*TRADE OAuth 1.0). Returns (new_token, new_secret) or None on failure.
     """
     try:
-        key, sec = _load_creds()
-        svc = _service(sandbox, key, sec)
+        # OLD: key, sec = _load_creds()
+        # NEW: Use the new credential system
+        consumer_key, consumer_secret, _ = get_credentials()
+        
+        # Build service with correct URLs
+        if sandbox:
+            base_url = "https://apisb.etrade.com"
+        else:
+            base_url = "https://api.etrade.com"
+            
+        svc = OAuth1Service(
+            name="etrade",
+            consumer_key=consumer_key,
+            consumer_secret=consumer_secret,
+            request_token_url=f"{base_url}/oauth/request_token",
+            access_token_url=f"{base_url}/oauth/access_token",
+            authorize_url="https://us.etrade.com/e/t/etws/authorize",
+            base_url=base_url
+        )
+        
         session = svc.get_session((access_token, access_secret))
         # E*TRADE renew endpoint (documented) -> /oauth/renew_access_token
-        r = session.get(f"{svc.base_url}/oauth/renew_access_token", params={"oauth_token": access_token}, timeout=8)
+        r = session.get(f"{base_url}/oauth/renew_access_token", params={"oauth_token": access_token}, timeout=8)
         if r.status_code == 200:
             # Response body: oauth_token=...&oauth_token_secret=...
             parts = dict(p.split("=",1) for p in r.text.split("&") if "=" in p)
@@ -121,7 +208,7 @@ def renew_access_token(sandbox: bool, access_token: str, access_secret: str):
         print(f"[Auth] Renew failed: {e}")
     return None
 
-def get_session(sandbox: bool, force=False, interactive=True, mode: str = "preview"):
+def get_session(sandbox: bool, force=False, interactive=True):
     """
     Returns authenticated session or None.
     - Tries cached token.
@@ -129,14 +216,26 @@ def get_session(sandbox: bool, force=False, interactive=True, mode: str = "previ
         * If interactive (or auto + TTY) -> full OAuth flow.
         * Else returns None.
     """
-    key, sec = _load_creds()
     if force and interactive:
         return refresh_session(sandbox)
 
     cached = _load_cached(sandbox)
     if cached:
         tok, tok_sec = cached
-        svc = _service(sandbox, key, sec)
+        
+        consumer_key, consumer_secret, _ = get_credentials()
+        base_url = "https://apisb.etrade.com" if sandbox else "https://api.etrade.com"
+        authorize_url = "https://us.etrade.com/e/t/etws/authorize"
+        svc = OAuth1Service(
+            name="etrade",
+            consumer_key=consumer_key,
+            consumer_secret=consumer_secret,
+            request_token_url=f"{base_url}/oauth/request_token",
+            access_token_url=f"{base_url}/oauth/access_token",
+            authorize_url=authorize_url,
+            base_url=base_url
+        )
+        
         try:
             session = svc.get_session((tok, tok_sec))
             r = session.get("v1/accounts/list.json", timeout=8)
@@ -150,18 +249,16 @@ def get_session(sandbox: bool, force=False, interactive=True, mode: str = "previ
         except Exception as e:
             print(f"[Auth] Cached token error: {e}")
 
-        # Need new auth
-        auto_tty_ok = (mode == "auto" and sys.stdin.isatty())
-        if interactive or auto_tty_ok:
-            print(f"[Auth] Starting interactive OAuth (mode={mode}, interactive={interactive}, auto_tty_ok={auto_tty_ok})")
+        # Only use interactive parameter now
+        if interactive and sys.stdin.isatty():
+            print(f"[Auth] Starting interactive OAuth (interactive={interactive})")
             return start_session(sandbox)
         print("[Auth] Non-interactive cycle -> auth deferred.")
         return None
 
     # No cached token at all
-    auto_tty_ok = (mode == "auto" and sys.stdin.isatty())
-    if interactive or auto_tty_ok:
-        print(f"[Auth] No cache -> interactive OAuth (mode={mode}, interactive={interactive}, auto_tty_ok={auto_tty_ok})")
+    if interactive and sys.stdin.isatty():
+        print(f"[Auth] No cache -> interactive OAuth (interactive={interactive})")
         return start_session(sandbox)
     print("[Auth] No cached token and non-interactive; returning None.")
     return None

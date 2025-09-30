@@ -25,7 +25,7 @@ I wanted a simple and free portfolio rebalancer for retirement accounts without 
 
 ### 1. E*TRADE Developer Setup
 1. Create a developer account + app on the E*TRADE developer portal: https://developer.etrade.com/home
-2. Obtain consumer key & secret.
+2. Obtain consumer key & secret: https://us.etrade.com/etx/ris/apikey
 3. Enable sandbox first.
 
 ### 2. Install
@@ -86,6 +86,8 @@ Set `trading.mode: auto` (use cautiously, especially if enabling loop mode).
 
 ## Configuration Reference
 
+The `balancer/config.yaml` file controls all behavior. Key sections:
+
 | Section | Purpose |
 |---------|---------|
 | classes | Target % allocation + single ETF per asset class |
@@ -95,42 +97,22 @@ Set `trading.mode: auto` (use cautiously, especially if enabling loop mode).
 | trading | Execution behavior & safety |
 
 ### classes
-Each class: target percent of total account value (cash included) and one ETF.
-
-### rebalance (heuristic)
-- `min_percent_drift`: Ignore small % drifts
-- `min_notional_trade`: Skip tiny trades
-- `max_notional_trade`: Cap single trade size
-- `account_min_turnover`: Skip account if total (buys+sells) below this
-
-### rebalance.integer_optimizer (recommended)
-Global whole‑share search minimizing:
+Each asset class needs a target percentage and preferred ETF symbol:
+```yaml
+classes:
+  Large:         { target_percent: 40, preferred_symbol: VOO }
+  International: { target_percent: 28, preferred_symbol: IXUS }
+  Bonds:         { target_percent: 20, preferred_symbol: BND }
+  Small:         { target_percent: 12, preferred_symbol: VBR }
 ```
-Σ (allocated_value_c - target_value_c)^2 + turnover_penalty * Σ |Δshares_c|
-```
-- `enabled`: true → use optimizer
-- `window`: share search radius (complexity ~(2w+1)^Nclasses)
-- `turnover_penalty`: dampen churn
-- `cash_buffer`: leave this much cash uninvested
+**Target percentages must sum to 100.**
 
-### loop
-- `enabled`: true to re-run forever (requires `trading.mode: auto`)
-- `interval_minutes`: sleep between cycles
-
-### accounts
-- `exclude_if_desc_contains`: substrings (case-insensitive) to skip
-- `include_only_descriptions`: exact matches (if list non-empty)
-
-### trading (single safety lever)
-| mode | Behavior |
-|------|----------|
-| preview | Plan only |
-| confirm | Plan + interactive yes/no |
-| auto | Plan + immediate execution |
-
-Other fields:
-- `max_orders_per_account`: hard cap
-- `allow_partial_funding_scale`: scale buys down if post-sell cash insufficient; else drop buys
+### rebalance (integer optimizer settings)
+- `min_percent_drift`: Ignore small % drifts from target allocation
+- `min_notional_trade`: Skip trades smaller than this dollar amount
+- `max_notional_trade`: Cap individual trade size (splits large trades)
+- `account_min_turnover`: Skip rebalancing if total turnover below threshold
+- `integer_optimizer`: Controls optimizer window and turnover penalty
 
 ---
 
@@ -144,36 +126,16 @@ Other fields:
 
 ---
 
-## Environment Toggles
-| Var | Effect |
-|-----|--------|
-| REBALANCER_DETAILED_PLAN=1 | Show per-class before/after table |
-| REBALANCER_DEBUG_TRADES=1  | Dump raw trades JSON |
-| REBALANCER_KILL=1          | Abort immediately |
+## Optimization Algorithm
+The rebalancer uses **integer optimization** to find the best whole-share allocation that minimizes:
+```
+Σ (allocated_value_c - target_value_c)² + turnover_penalty × Σ |Δshares_c|
+```
 
----
-
-## Optimizer vs Heuristic
-| Aspect | Optimizer | Heuristic |
-|--------|-----------|-----------|
-| Rounding | Global | Per-class |
-| Objective | Explicit (least squared deviation) | Implicit drifts |
-| Stability | Tunable via penalty | Threshold-driven |
-| Use | Recommended default | Fallback / disabled mode |
-
----
-
-## Typical Workflow
-1. Start with `mode: preview`
-2. Move to `confirm`
-3. Switch to `auto` (optionally enable loop)
-
----
-
-## Roadmap (Potential)
-- Tax-aware trading for non-retirement accounts 
-- Custom diversification based on existing assets (e.g., company stock)
----
-
-## License
-MIT (see MIT License.txt)
+Configure in `config.yaml`:
+```yaml
+rebalance:
+  integer_optimizer:
+    window: 4                # Share search radius (complexity scales exponentially)  
+    turnover_penalty: 0.0    # Penalty for changing positions (reduces churn)
+```
