@@ -117,12 +117,12 @@ classes:
 ---
 
 ## Funding & Execution Flow
-1. Fetch positions, quotes, cash
-2. Optimize (integer or heuristic)
-3. Print plan (add per-class table with `REBALANCER_DETAILED_PLAN=1`)
-4. (confirm) prompt user
-5. Execute sells → refresh cash → execute buys (scaling if enabled)
-6. No unfunded buys submitted
+1. Fetch positions, quotes, and cash balances
+2. Optimize using integer optimization (whole-share allocation)
+3. Print the rebalancing plan (per-class allocation table is always shown)
+4. If in confirm mode, prompt user for approval
+5. Execute sells, refresh cash, then execute buys (scaling if enabled)
+6. No unfunded buys are submitted
 
 ---
 
@@ -139,3 +139,16 @@ rebalance:
     window: 4                # Share search radius (complexity scales exponentially)  
     turnover_penalty: 0.0    # Penalty for changing positions (reduces churn)
 ```
+
+## How to Run
+
+1. Open a terminal in VS Code.
+2. Activate your virtual environment:
+   ```powershell
+   .\.venv\Scripts\Activate.ps1
+   ```
+3. Run the program:
+   ```powershell
+   python run.py prod preview
+   ```
+   *(Use `confirm` or `auto` for other modes.)*

@@ -13,6 +13,11 @@ import subprocess
 import yaml
 from pathlib import Path
 
+if len(sys.argv) > 2:
+    os.environ["TRADING_MODE"] = sys.argv[2].lower()
+else:
+    os.environ["TRADING_MODE"] = "preview"
+
 def find_python():
     """Find the best Python executable to use."""
     script_dir = Path(__file__).parent.absolute()
