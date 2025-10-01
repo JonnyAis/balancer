@@ -13,10 +13,17 @@ def current_weights(positions_df, quotes_df, symbol_to_class: dict):
     weights = (grouped / total * 100).to_dict()
     return weights, float(total)
 
-def build_trades(targets: dict, current: dict, total_value: float,
-                 prices: dict, class_to_symbol: dict,
-                 min_drift=0.5, min_notional=100.0,
-                 max_notional_trade=None):
+
+def build_trades(
+    targets: dict,
+    current: dict,
+    total_value: float,
+    prices: dict,
+    class_to_symbol: dict,
+    min_drift=0.5,
+    min_notional=100.0,
+    max_notional_trade=None,
+):
     """
     Generate trades to move each asset class toward target within one account.
 
@@ -55,12 +62,14 @@ def build_trades(targets: dict, current: dict, total_value: float,
             else:
                 continue
 
-        trades.append({
-            "asset_class": cls,
-            "symbol": sym,
-            "action": "BUY" if qty > 0 else "SELL",
-            "quantity": abs(qty),
-            "est_notional": round(abs(qty) * price, 2),
-            "drift_pct": round(drift_pct, 3)
-        })
+        trades.append(
+            {
+                "asset_class": cls,
+                "symbol": sym,
+                "action": "BUY" if qty > 0 else "SELL",
+                "quantity": abs(qty),
+                "est_notional": round(abs(qty) * price, 2),
+                "drift_pct": round(drift_pct, 3),
+            }
+        )
     return trades

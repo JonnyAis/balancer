@@ -23,7 +23,7 @@ rebalance:
   cash_buffer: 0
   integer_optimizer:
     turnover_penalty: 0.0
-    window: 4
+    window: 10
   max_notional_trade: 20000
   min_notional_trade: 200
   min_percent_drift: 0.2

@@ -1,21 +1,23 @@
-import pandas as pd
-import requests
-import uuid
 import json
 import os
+import uuid
+
+import pandas as pd
+
 
 class ETradeClient:
     """
     Minimal E*TRADE API wrapper used by the rebalancer.
     Uses accountIdKey for account-specific endpoints (portfolio, balance, orders).
     """
+
     def __init__(self, session, sandbox: bool = False):
         self.session = session
         self.sandbox = sandbox
         if sandbox:
             self.base_url = "https://apisb.etrade.com"  # Updated sandbox URL
         else:
-            self.base_url = "https://api.etrade.com"   # Production URL
+            self.base_url = "https://api.etrade.com"  # Production URL
 
     def accounts(self) -> pd.DataFrame:
         resp = self.session.get(f"{self.base_url}/v1/accounts/list.json", params={"format": "json"})
@@ -23,11 +25,7 @@ class ETradeClient:
             j = resp.json()
         except Exception:
             return pd.DataFrame()
-        accounts = (
-            j.get("AccountListResponse", {})
-             .get("Accounts", {})
-             .get("Account", [])
-        )
+        accounts = j.get("AccountListResponse", {}).get("Accounts", {}).get("Account", [])
         if not accounts:
             return pd.DataFrame()
         df = pd.DataFrame(accounts)
@@ -46,19 +44,19 @@ class ETradeClient:
     def quotes(self, symbols) -> dict:  # Change return type from DataFrame to dict
         if not symbols:
             return {}
-        
+
         debug = os.getenv("REBALANCER_DEBUG_QUOTES") == "1"
-        
+
         sym_str = ",".join(symbols)
         resp = self.session.get(
             f"{self.base_url}/v1/market/quote/{sym_str}.json",
-            params={"detailFlag": "FUNDAMENTAL", "format": "json"}
+            params={"detailFlag": "FUNDAMENTAL", "format": "json"},
         )
-        
+
         if debug:
             print(f"[Quotes] Request: {resp.url}")
             print(f"[Quotes] Status: {resp.status_code}")
-        
+
         try:
             j = resp.json()
             if debug:
@@ -67,26 +65,26 @@ class ETradeClient:
             if debug:
                 print(f"[Quotes] JSON parse error: {e}")
             return {}
-        
+
         qdata = j.get("QuoteResponse", {}).get("QuoteData", [])
         quotes_dict = {}
-        
+
         for q in qdata:
             try:
                 symbol = q["Product"]["symbol"]
-                
+
                 # Try multiple price sources (E*TRADE returns different fields)
                 price = None
                 price_sources = [
-                    ("Fundamental", "lastTrade"),      # During market hours
-                    ("All", "lastTrade"),              # Alternative path
-                    ("All", "previousClose"),          # After hours fallback
-                    ("Fundamental", "previousClose"),   # Another fallback
-                    ("All", "close"),                  # Legacy field
-                    ("lastPrice",),                    # Direct field
-                    ("close",),                        # Direct field
+                    ("Fundamental", "lastTrade"),  # During market hours
+                    ("All", "lastTrade"),  # Alternative path
+                    ("All", "previousClose"),  # After hours fallback
+                    ("Fundamental", "previousClose"),  # Another fallback
+                    ("All", "close"),  # Legacy field
+                    ("lastPrice",),  # Direct field
+                    ("close",),  # Direct field
                 ]
-                
+
                 for source_path in price_sources:
                     current = q
                     try:
@@ -97,21 +95,21 @@ class ETradeClient:
                             break
                     except (KeyError, TypeError):
                         continue
-                
+
                 if price and price > 0:
                     quotes_dict[symbol] = {
                         "lastPrice": price,
                         "last": price,  # For backward compatibility
-                        "close": price
+                        "close": price,
                     }
                 else:
                     print(f"[Quotes] Warning: No valid price found for {symbol}")
                     quotes_dict[symbol] = {"lastPrice": 0, "last": 0, "close": 0}
-                    
+
             except KeyError as e:
                 print(f"[Quotes] Error parsing quote for symbol: {e}")
                 continue
-        
+
         return quotes_dict
 
     def balance(self, account_id_key: str, account_id_numeric: str = None) -> dict:
@@ -140,8 +138,8 @@ class ETradeClient:
                 ("cashBalance",),
                 ("cash",),
                 ("netCash",),
-                ("Computed","cashAvailableForInvestment"),
-                ("Computed","cashBalance")
+                ("Computed", "cashAvailableForInvestment"),
+                ("Computed", "cashBalance"),
             ]
             for path in paths:
                 cur = bal
@@ -152,7 +150,7 @@ class ETradeClient:
                     else:
                         ok = False
                         break
-                if ok and isinstance(cur, (int,float)):
+                if ok and isinstance(cur, (int, float)):
                     return float(cur)
             return 0.0
 
@@ -175,15 +173,15 @@ class ETradeClient:
             pr = port.get("PortfolioResponse", {}) or {}
             totals = pr.get("Totals", {}) or {}
             totals_cash = None
-            for k in ("cashBalance","cash","netCash","totalCash"):
+            for k in ("cashBalance", "cash", "netCash", "totalCash"):
                 v = totals.get(k)
-                if isinstance(v,(int,float)):
+                if isinstance(v, (int, float)):
                     totals_cash = float(v)
                     break
             acct_list = pr.get("AccountPortfolio", []) or []
             pos_val = 0.0
             for ap in acct_list:
-                for p in (ap.get("Position") or []):
+                for p in ap.get("Position") or []:
                     try:
                         pos_val += float(p.get("marketValue", 0.0) or 0.0)
                     except Exception:
@@ -195,7 +193,7 @@ class ETradeClient:
                 or (acct_list and acct_list[0].get("totalMarketValue"))
             )
             derived = None
-            if isinstance(total_guess,(int,float)) and total_guess > 0:
+            if isinstance(total_guess, (int, float)) and total_guess > 0:
                 d = float(total_guess) - pos_val
                 if d >= 0:
                     derived = d
@@ -222,7 +220,7 @@ class ETradeClient:
             url,
             data=body,
             headers={"Content-Type": "application/json", "Accept": "application/json"},
-            header_auth=True  # important for POST signing
+            header_auth=True,  # important for POST signing
         )
 
     def preview_equity_order(self, account_id_key: str, symbol: str, action: str, quantity: int):
@@ -232,20 +230,24 @@ class ETradeClient:
             "PreviewOrderRequest": {
                 "orderType": "EQ",
                 "clientOrderId": client_order_id,
-                "Order": [{
-                    "allOrNone": "false",
-                    "priceType": "MARKET",
-                    "orderTerm": "GOOD_FOR_DAY",
-                    "marketSession": "REGULAR",
-                    "stopPrice": "",
-                    "limitPrice": "",
-                    "Instrument": [{
-                        "Product": {"securityType": "EQ", "symbol": symbol},
-                        "orderAction": action,
-                        "quantityType": "QUANTITY",
-                        "quantity": quantity
-                    }]
-                }]
+                "Order": [
+                    {
+                        "allOrNone": "false",
+                        "priceType": "MARKET",
+                        "orderTerm": "GOOD_FOR_DAY",
+                        "marketSession": "REGULAR",
+                        "stopPrice": "",
+                        "limitPrice": "",
+                        "Instrument": [
+                            {
+                                "Product": {"securityType": "EQ", "symbol": symbol},
+                                "orderAction": action,
+                                "quantityType": "QUANTITY",
+                                "quantity": quantity,
+                            }
+                        ],
+                    }
+                ],
             }
         }
         resp = self._order_post(url, payload)
@@ -265,31 +267,42 @@ class ETradeClient:
             "preview_id": preview_id,
             "client_order_id": client_order_id,
             "raw": pr or data,
-            "endpoint": url
+            "endpoint": url,
         }
 
-    def place_equity_order(self, account_id_key: str, symbol: str, action: str,
-                           quantity: int, preview_id: str, client_order_id: str):
+    def place_equity_order(
+        self,
+        account_id_key: str,
+        symbol: str,
+        action: str,
+        quantity: int,
+        preview_id: str,
+        client_order_id: str,
+    ):
         url = f"{self.base_url}/v1/accounts/{account_id_key}/orders/place.json"
         payload = {
             "PlaceOrderRequest": {
                 "orderType": "EQ",
                 "clientOrderId": client_order_id,
                 "PreviewIds": [{"previewId": preview_id}],
-                "Order": [{
-                    "allOrNone": "false",
-                    "priceType": "MARKET",
-                    "orderTerm": "GOOD_FOR_DAY",
-                    "marketSession": "REGULAR",
-                    "stopPrice": "",
-                    "limitPrice": "",
-                    "Instrument": [{
-                        "Product": {"securityType": "EQ", "symbol": symbol},
-                        "orderAction": action,
-                        "quantityType": "QUANTITY",
-                        "quantity": quantity
-                    }]
-                }]
+                "Order": [
+                    {
+                        "allOrNone": "false",
+                        "priceType": "MARKET",
+                        "orderTerm": "GOOD_FOR_DAY",
+                        "marketSession": "REGULAR",
+                        "stopPrice": "",
+                        "limitPrice": "",
+                        "Instrument": [
+                            {
+                                "Product": {"securityType": "EQ", "symbol": symbol},
+                                "orderAction": action,
+                                "quantityType": "QUANTITY",
+                                "quantity": quantity,
+                            }
+                        ],
+                    }
+                ],
             }
         }
         resp = self._order_post(url, payload)
@@ -301,9 +314,4 @@ class ETradeClient:
         if status == 401:
             return {"ok": False, "status": status, "raw": data, "endpoint": url}
         r = data.get("PlaceOrderResponse", data)
-        return {
-            "ok": status == 200,
-            "status": status,
-            "raw": r,
-            "endpoint": url
-        }
+        return {"ok": status == 200, "status": status, "raw": r, "endpoint": url}

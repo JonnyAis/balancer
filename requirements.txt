@@ -3,3 +3,5 @@ pandas
 PyYAML  
 python-dotenv
 tabulate
+ruff
+pytest

@@ -1,6 +1,7 @@
 import math
 from itertools import product
 
+
 def optimize_integer_portfolio(
     targets_pct: dict,
     prices: dict,
@@ -11,7 +12,7 @@ def optimize_integer_portfolio(
     turnover_penalty: float = 0.0,
     min_notional_trade: float = 0.0,
     account_min_turnover: float = 0.0,
-    cash_buffer: float = 0.0
+    cash_buffer: float = 0.0,
 ):
     """
     Enumerate whole-share allocations near target to minimize:
@@ -66,7 +67,9 @@ def optimize_integer_portfolio(
 
     # Pre-fetch prices per class symbol
     symbol_prices = {class_to_symbol[c]: prices[class_to_symbol[c]] for c in classes}
-    current_class_shares = {cls: int(current_shares.get(class_to_symbol[cls], 0)) for cls in classes}
+    current_class_shares = {
+        cls: int(current_shares.get(class_to_symbol[cls], 0)) for cls in classes
+    }
 
     # Enumerate Cartesian product
     ranges = [share_ranges[c] for c in classes]
@@ -114,14 +117,16 @@ def optimize_integer_portfolio(
         notional = round(qty * price, 2)
         if notional < min_notional_trade:
             continue
-        trades.append({
-            "asset_class": cls,
-            "symbol": sym,
-            "action": action,
-            "quantity": qty,
-            "est_notional": notional,
-            "delta_shares": delta
-        })
+        trades.append(
+            {
+                "asset_class": cls,
+                "symbol": sym,
+                "action": action,
+                "quantity": qty,
+                "est_notional": notional,
+                "delta_shares": delta,
+            }
+        )
         total_turnover_notional += notional
 
     if total_turnover_notional < account_min_turnover:
