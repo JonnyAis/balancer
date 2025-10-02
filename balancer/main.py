@@ -7,6 +7,8 @@ import traceback
 import pandas as pd
 import yaml
 from tabulate import tabulate
+import pandas_market_calendars as mcal
+from datetime import datetime, timezone
 
 from .auth import get_session
 from .etrade_client import ETradeClient
@@ -58,6 +60,13 @@ def load_config():
         "accounts": cfg.get("accounts", {}),
         "trading": cfg.get("trading", {}),
     }
+
+
+def is_market_open():
+    nyse = mcal.get_calendar('NYSE')
+    now = datetime.now(timezone.utc)
+    schedule = nyse.schedule(start_date=now.date(), end_date=now.date())
+    return nyse.open_at_time(schedule, now)
 
 
 # -------- PLAN HELPERS --------
@@ -824,6 +833,9 @@ def run():
             if os.getenv("REBALANCER_KILL"):
                 print("[Loop] Kill flag detected. Exiting.")
                 break
+            if not is_market_open():
+                print("[Market] NYSE is closed. Skipping this cycle.")
+                return
             _one_cycle(cfg)
 
         except KeyboardInterrupt:
