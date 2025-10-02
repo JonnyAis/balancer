@@ -269,6 +269,8 @@ def get_session(sandbox: bool, force=False, interactive=True):
                 return session
             if r.status_code == 401:
                 print("[Auth] Cached token unauthorized (401).")
+                print("[Auth] Forcing interactive OAuth to refresh token...")
+                return start_session(sandbox)
             else:
                 print(f"[Auth] Cached token test status={r.status_code}")
         except Exception as e:

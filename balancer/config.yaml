@@ -28,4 +28,4 @@ rebalance:
   min_notional_trade: 200
   min_percent_drift: 0.2
 trading:
-  mode: confirm
+  mode: auto
