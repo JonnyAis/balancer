@@ -152,3 +152,8 @@ rebalance:
    python run.py prod preview
    ```
    *(Use `confirm` or `auto` for other modes.)*
+
+**Optional (one-liner for PowerShell):**
+```powershell
+.\.venv\Scripts\Activate.ps1; python run.py prod preview
+```
