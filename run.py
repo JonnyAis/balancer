@@ -15,10 +15,12 @@ from pathlib import Path
 
 import yaml
 
-if len(sys.argv) > 2:
-    os.environ["TRADING_MODE"] = sys.argv[2].lower()
-else:
-    os.environ["TRADING_MODE"] = "preview"
+
+def get_config_mode():
+    config_path = os.path.join(os.path.dirname(__file__), "balancer", "config.yaml")
+    with open(config_path, "r") as f:
+        cfg = yaml.safe_load(f)
+    return cfg.get("trading", {}).get("mode", "preview")
 
 
 def find_python():
@@ -89,11 +91,16 @@ def main():
             f"🔄 Environment override: {'SANDBOX' if env_override == 'sandbox' else 'PRODUCTION'}"
         )
 
-    # Set trading mode if specified
+    # Set trading mode if specified, otherwise use config
     if mode:
         if not set_mode(mode):
             input("Press Enter to exit...")
             return 1
+        os.environ["TRADING_MODE"] = mode  # ← Set env var to CLI mode
+    else:
+        config_mode = get_config_mode()  # ← Read from config
+        os.environ["TRADING_MODE"] = config_mode  # ← Set env var to config mode
+        print(f"⚙️  Using trading mode from config: {config_mode}")
 
     # Get the directory where this script is located
     script_dir = Path(__file__).parent.absolute()

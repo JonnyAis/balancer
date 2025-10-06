@@ -155,5 +155,5 @@ rebalance:
 
 **Optional (one-liner for PowerShell):**
 ```powershell
-.\.venv\Scripts\Activate.ps1; python run.py prod preview
+.\.venv\Scripts\Activate.ps1; python run.py prod confirm
 ```
