@@ -8,7 +8,7 @@ import pandas as pd
 import yaml
 from tabulate import tabulate
 import pandas_market_calendars as mcal
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from .auth import get_session
 from .etrade_client import ETradeClient
@@ -63,10 +63,47 @@ def load_config():
 
 
 def is_market_open():
-    nyse = mcal.get_calendar('NYSE')
+    """
+    Return (is_open: bool, next_open: datetime|None).
+    - If market is open now -> (True, None)
+    - If market is closed -> (False, next_open_datetime or None)
+    """
+    nyse = mcal.get_calendar("NYSE")
     now = datetime.now(timezone.utc)
-    schedule = nyse.schedule(start_date=now.date(), end_date=now.date())
-    return nyse.open_at_time(schedule, now)
+
+    # Try today's schedule first in a safe way
+    try:
+        schedule = nyse.schedule(start_date=now.date(), end_date=now.date())
+    except Exception:
+        schedule = None
+
+    # If schedule exists and open_at_time works, check now
+    if schedule is not None and not schedule.empty:
+        try:
+            if nyse.open_at_time(schedule, now):
+                return True, None
+        except Exception:
+            # If open_at_time cannot determine (timestamp not covered), continue to search
+            pass
+
+    # Find next trading day's open within a reasonable window
+    max_lookahead_days = 30
+    for d in range(0, max_lookahead_days + 1):
+        day = (now + timedelta(days=d)).date()
+        try:
+            sched = nyse.schedule(start_date=day, end_date=day)
+            if sched is None or sched.empty:
+                continue
+            next_open = sched.iloc[0]["market_open"].to_pydatetime()
+            # Normalize to timezone-aware UTC
+            if next_open.tzinfo is None:
+                next_open = next_open.replace(tzinfo=timezone.utc)
+            return False, next_open
+        except Exception:
+            continue
+
+    # No open found in lookahead window
+    return False, None
 
 
 # -------- PLAN HELPERS --------
@@ -833,10 +870,34 @@ def run():
             if os.getenv("REBALANCER_KILL"):
                 print("[Loop] Kill flag detected. Exiting.")
                 break
-            if not is_market_open():
-                print("[Market] NYSE is closed. Skipping this cycle.")
-                return
-            _one_cycle(cfg)
+
+            try:
+                is_open, next_open = is_market_open()
+            except Exception as e:
+                print(f"[Market][Error] Market hours check failed: {e}")
+                # If we can't determine market hours, skip this cycle but keep looping
+                continue
+
+            if is_open:
+                _one_cycle(cfg)
+            else:
+                now = datetime.now(timezone.utc)
+                next_cycle_time = now + timedelta(minutes=interval_min)
+
+                if next_open is None:
+                    print("[Market] NYSE closed; no upcoming open found in lookup window. Exiting loop.")
+                    break
+
+                # If the next scheduled open is after the next cycle time, stop the program
+                if next_open > next_cycle_time:
+                    print("[Market] NYSE is closed.")
+                    print(f"[Market] Next open: {next_open.isoformat()}")
+                    print("[Market] Next scheduled cycle will run before the market re-opens. Exiting.")
+                    break
+                else:
+                    # market will be open by the next cycle; skip this cycle and continue waiting
+                    print("[Market] NYSE is closed now, but will open before next cycle. Skipping this cycle.")
+                    continue
 
         except KeyboardInterrupt:
             print("\n[Loop] Interrupted by user.")
