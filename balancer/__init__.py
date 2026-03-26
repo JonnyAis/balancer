@@ -1,2 +1,2 @@
-__all__ = ["auth", "etrade_client", "portfolio", "rebalance", "main"]
+__all__ = ["auth", "etrade_client", "portfolio", "rebalance", "main", "journal"]
 __version__ = "0.1.0"

@@ -12,7 +12,8 @@ from datetime import datetime, timezone, timedelta
 
 from .auth import get_session
 from .etrade_client import ETradeClient
-from .optimizer import optimize_integer_portfolio  # ADD THIS import
+from .journal import log_preview, log_place, log_cycle
+from .optimizer import optimize_integer_portfolio
 from .portfolio import extract_positions
 from .rebalance import current_weights
 
@@ -591,6 +592,7 @@ def _one_cycle(cfg):
     allow_scale = True  # Could move to config if needed
 
     print(f"[CycleInit] Mode={mode} Sandbox={sandbox} Optimizer=True")
+    log_cycle("start", mode=mode, sandbox=sandbox)
 
     interactive = mode != "auto"
     session = get_session(sandbox, interactive=interactive)
@@ -772,12 +774,14 @@ def _one_cycle(cfg):
         # Sells
         for s in sells:
             pv = client.preview_equity_order(k, s["symbol"], "SELL", s["quantity"])
+            log_preview(desc, s["symbol"], "SELL", s["quantity"], pv)
             if not pv["ok"]:
                 print(f"[Execute][{desc}] SELL preview FAIL {s['symbol']}")
                 continue
             pl = client.place_equity_order(
                 k, s["symbol"], "SELL", s["quantity"], pv["preview_id"], pv["client_order_id"]
             )
+            log_place(desc, s["symbol"], "SELL", s["quantity"], pl)
             print(f"[Execute][{desc}] SELL {s['symbol']} status={'OK' if pl['ok'] else 'FAIL'}")
 
         # Refresh cash
@@ -813,14 +817,17 @@ def _one_cycle(cfg):
 
         for b in exec_buys:
             pv = client.preview_equity_order(k, b["symbol"], "BUY", b["quantity"])
+            log_preview(desc, b["symbol"], "BUY", b["quantity"], pv)
             if not pv["ok"]:
                 print(f"[Execute][{desc}] BUY preview FAIL {b['symbol']}")
                 continue
             pl = client.place_equity_order(
                 k, b["symbol"], "BUY", b["quantity"], pv["preview_id"], pv["client_order_id"]
             )
+            log_place(desc, b["symbol"], "BUY", b["quantity"], pl)
             print(f"[Execute][{desc}] BUY {b['symbol']} status={'OK' if pl['ok'] else 'FAIL'}")
 
+    log_cycle("end", mode=mode, sandbox=sandbox)
     print("[Cycle] Complete.")
 
 
