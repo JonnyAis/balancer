@@ -31,3 +31,5 @@ trading:
   mode: auto
   order_type: LIMIT          # MARKET or LIMIT
   limit_tolerance_pct: 0.5   # For LIMIT orders: buy at last*(1+tol), sell at last*(1-tol)
+  daily_max_turnover: 100000   # Max dollar turnover per calendar day (0 = unlimited)
+  daily_max_trades: 50         # Max individual orders per calendar day (0 = unlimited)

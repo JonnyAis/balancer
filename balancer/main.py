@@ -11,6 +11,7 @@ import pandas_market_calendars as mcal
 from datetime import datetime, timezone, timedelta
 
 from .auth import get_session
+from .circuit_breaker import check_allowed, record_trades
 from .etrade_client import ETradeClient
 from .journal import log_preview, log_place, log_cycle
 from .optimizer import optimize_integer_portfolio
@@ -758,6 +759,21 @@ def _one_cycle(cfg):
         print(f"[Cycle] Unknown mode={mode}; skipping execution.")
         return
 
+    # Circuit breaker check
+    planned_trades = 0
+    planned_turnover = 0.0
+    for acct in plan["accounts"]:
+        for t in acct["sells"] + acct["buys"]:
+            planned_trades += 1
+            planned_turnover += t["est_notional"]
+
+    max_trades = int(trading_cfg.get("daily_max_trades", 0))
+    max_turnover = float(trading_cfg.get("daily_max_turnover", 0))
+    allowed, reason = check_allowed(planned_trades, planned_turnover, max_trades, max_turnover)
+    if not allowed:
+        print(f"[CircuitBreaker] BLOCKED: {reason}")
+        return
+
     # Order type configuration
     order_type = trading_cfg.get("order_type", "MARKET").upper()
     limit_tol = float(trading_cfg.get("limit_tolerance_pct", 0.5)) / 100.0
@@ -849,6 +865,7 @@ def _one_cycle(cfg):
             log_place(desc, b["symbol"], "BUY", b["quantity"], pl)
             print(f"[Execute][{desc}] BUY {b['symbol']} status={'OK' if pl['ok'] else 'FAIL'}")
 
+    record_trades(planned_trades, planned_turnover)
     log_cycle("end", mode=mode, sandbox=sandbox)
     print("[Cycle] Complete.")
 
