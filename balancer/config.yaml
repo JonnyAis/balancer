@@ -29,3 +29,5 @@ rebalance:
   min_percent_drift: 0.2
 trading:
   mode: auto
+  order_type: LIMIT          # MARKET or LIMIT
+  limit_tolerance_pct: 0.5   # For LIMIT orders: buy at last*(1+tol), sell at last*(1-tol)

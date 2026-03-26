@@ -223,7 +223,15 @@ class ETradeClient:
             header_auth=True,  # important for POST signing
         )
 
-    def preview_equity_order(self, account_id_key: str, symbol: str, action: str, quantity: int):
+    def preview_equity_order(
+        self,
+        account_id_key: str,
+        symbol: str,
+        action: str,
+        quantity: int,
+        price_type: str = "MARKET",
+        limit_price: float = None,
+    ):
         url = f"{self.base_url}/v1/accounts/{account_id_key}/orders/preview.json"
         client_order_id = str(uuid.uuid4())[:18]
         payload = {
@@ -233,11 +241,11 @@ class ETradeClient:
                 "Order": [
                     {
                         "allOrNone": "false",
-                        "priceType": "MARKET",
+                        "priceType": price_type,
                         "orderTerm": "GOOD_FOR_DAY",
                         "marketSession": "REGULAR",
                         "stopPrice": "",
-                        "limitPrice": "",
+                        "limitPrice": str(round(limit_price, 2)) if limit_price else "",
                         "Instrument": [
                             {
                                 "Product": {"securityType": "EQ", "symbol": symbol},
@@ -278,6 +286,8 @@ class ETradeClient:
         quantity: int,
         preview_id: str,
         client_order_id: str,
+        price_type: str = "MARKET",
+        limit_price: float = None,
     ):
         url = f"{self.base_url}/v1/accounts/{account_id_key}/orders/place.json"
         payload = {
@@ -288,11 +298,11 @@ class ETradeClient:
                 "Order": [
                     {
                         "allOrNone": "false",
-                        "priceType": "MARKET",
+                        "priceType": price_type,
                         "orderTerm": "GOOD_FOR_DAY",
                         "marketSession": "REGULAR",
                         "stopPrice": "",
-                        "limitPrice": "",
+                        "limitPrice": str(round(limit_price, 2)) if limit_price else "",
                         "Instrument": [
                             {
                                 "Product": {"securityType": "EQ", "symbol": symbol},

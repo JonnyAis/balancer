@@ -758,6 +758,10 @@ def _one_cycle(cfg):
         print(f"[Cycle] Unknown mode={mode}; skipping execution.")
         return
 
+    # Order type configuration
+    order_type = trading_cfg.get("order_type", "MARKET").upper()
+    limit_tol = float(trading_cfg.get("limit_tolerance_pct", 0.5)) / 100.0
+
     # Execute orders
     for acct in plan["accounts"]:
         k = acct["accountIdKey"]
@@ -773,13 +777,22 @@ def _one_cycle(cfg):
 
         # Sells
         for s in sells:
-            pv = client.preview_equity_order(k, s["symbol"], "SELL", s["quantity"])
+            limit_px = None
+            if order_type == "LIMIT":
+                sym_price = prices.get(s["symbol"], 0)
+                if sym_price > 0:
+                    limit_px = round(sym_price * (1 - limit_tol), 2)
+            pv = client.preview_equity_order(
+                k, s["symbol"], "SELL", s["quantity"],
+                price_type=order_type, limit_price=limit_px,
+            )
             log_preview(desc, s["symbol"], "SELL", s["quantity"], pv)
             if not pv["ok"]:
                 print(f"[Execute][{desc}] SELL preview FAIL {s['symbol']}")
                 continue
             pl = client.place_equity_order(
-                k, s["symbol"], "SELL", s["quantity"], pv["preview_id"], pv["client_order_id"]
+                k, s["symbol"], "SELL", s["quantity"], pv["preview_id"], pv["client_order_id"],
+                price_type=order_type, limit_price=limit_px,
             )
             log_place(desc, s["symbol"], "SELL", s["quantity"], pl)
             print(f"[Execute][{desc}] SELL {s['symbol']} status={'OK' if pl['ok'] else 'FAIL'}")
@@ -816,13 +829,22 @@ def _one_cycle(cfg):
                 exec_buys = []
 
         for b in exec_buys:
-            pv = client.preview_equity_order(k, b["symbol"], "BUY", b["quantity"])
+            limit_px = None
+            if order_type == "LIMIT":
+                sym_price = prices.get(b["symbol"], 0)
+                if sym_price > 0:
+                    limit_px = round(sym_price * (1 + limit_tol), 2)
+            pv = client.preview_equity_order(
+                k, b["symbol"], "BUY", b["quantity"],
+                price_type=order_type, limit_price=limit_px,
+            )
             log_preview(desc, b["symbol"], "BUY", b["quantity"], pv)
             if not pv["ok"]:
                 print(f"[Execute][{desc}] BUY preview FAIL {b['symbol']}")
                 continue
             pl = client.place_equity_order(
-                k, b["symbol"], "BUY", b["quantity"], pv["preview_id"], pv["client_order_id"]
+                k, b["symbol"], "BUY", b["quantity"], pv["preview_id"], pv["client_order_id"],
+                price_type=order_type, limit_price=limit_px,
             )
             log_place(desc, b["symbol"], "BUY", b["quantity"], pl)
             print(f"[Execute][{desc}] BUY {b['symbol']} status={'OK' if pl['ok'] else 'FAIL'}")
