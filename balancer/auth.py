@@ -10,7 +10,8 @@ from rauth import OAuth1Service
 
 _BASE_LIVE = "https://api.etrade.com"
 _BASE_SB = "https://apisb.etrade.com"
-_TOKENS_PATH = os.path.join(os.path.dirname(__file__), "tokens.json")
+_TOKENS_DIR = os.path.join(os.path.expanduser("~"), ".balancer")
+_TOKENS_PATH = os.path.join(_TOKENS_DIR, "tokens.json")
 
 
 def _mask(v: str) -> str:
@@ -35,6 +36,7 @@ def _load_cached(sandbox: bool):
 
 
 def _save_cached(sandbox: bool, token: str, token_secret: str):
+    os.makedirs(_TOKENS_DIR, exist_ok=True)
     data = {}
     if os.path.exists(_TOKENS_PATH):
         try:
