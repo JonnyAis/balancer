@@ -24,6 +24,7 @@ from datetime import datetime
 
 from .backtest_report import generate_html_report
 from .basket_construction import (
+    compute_swap_scores,
     load_basket_config,
     optimize_basket,
     resolve_external_positions,
@@ -92,9 +93,10 @@ def init_paper_portfolio(config: dict, refresh: bool = False) -> dict:
     basket_cfg = config.get("basket", {})
     benchmark_cfg = config.get("benchmark", {})
     opt_cfg = config.get("optimizer", {})
+    tlh_cfg = config.get("tlh", {})
 
     benchmark_symbol = benchmark_cfg.get("symbol", "VOO")
-    candidate_pool = basket_cfg.get("candidate_pool", 80)
+    candidate_pool = basket_cfg.get("candidate_pool", 150)
     lookback_days = basket_cfg.get("lookback_days", 252)
     total_value = config.get("taxable_account_value", 200_000)
 
@@ -116,6 +118,14 @@ def init_paper_portfolio(config: dict, refresh: bool = False) -> dict:
     latest_prices = prices_df.iloc[-1].to_dict()
     external_values = resolve_external_positions(config, latest_prices)
 
+    # Swap scores — bias optimizer toward TLH-swappable stocks
+    min_corr = tlh_cfg.get("min_correlation_for_swap", 0.85)
+    correlation = returns.corr()
+    swap_scores = compute_swap_scores(
+        available, correlation, sector_map, min_correlation=min_corr,
+    )
+    swappability_weight = basket_cfg.get("swappability_weight", 0.0002)
+
     # Optimize
     result = optimize_basket(
         candidate_symbols=available,
@@ -132,6 +142,8 @@ def init_paper_portfolio(config: dict, refresh: bool = False) -> dict:
         max_stocks=basket_cfg.get("max_stocks", 40),
         turnover_penalty=basket_cfg.get("turnover_penalty", 0.005),
         sector_max_deviation_pct=basket_cfg.get("sector_max_deviation_pct", 5.0),
+        swap_scores=swap_scores,
+        swappability_weight=swappability_weight,
         solver=opt_cfg.get("solver", "CLARABEL"),
     )
 

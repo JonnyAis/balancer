@@ -1,0 +1,72 @@
+# ---------------------------------------------------------------------------
+# Basket construction config for taxable direct-indexing
+# ---------------------------------------------------------------------------
+
+benchmark:
+  symbol: VOO                     # ETF to track
+  index_name: S&P 500             # For constituent lookups
+
+basket:
+  max_stocks: 40                  # Target number of stocks in basket
+  candidate_pool: 150             # Pull top N index constituents by weight
+                                  # (150 gives enough sector depth for swap clusters)
+  lookback_days: 252              # ~1 year of trading days for covariance
+  min_weight_pct: 0.5             # Minimum position size (%) or else 0
+  max_weight_pct: 8.0             # Maximum single-stock concentration
+  turnover_penalty: 0.005         # Penalty on |w_new - w_current| (reduces churn)
+  sector_max_deviation_pct: 5.0   # Max sector weight deviation from benchmark
+  swappability_weight: 0.0002     # Bonus for picking TLH-swappable stocks
+                                  # 0 = ignore, higher = more TLH-friendly (at TE cost)
+
+optimizer:
+  solver: CLARABEL                # cvxpy solver (CLARABEL, SCS, OSQP all work)
+  max_iterations: 10000
+
+# ---------------------------------------------------------------------------
+# External / shadow positions
+# Securities held elsewhere that count toward total portfolio exposure.
+# The optimizer will reduce or eliminate these from the basket.
+# ---------------------------------------------------------------------------
+external_positions:
+  - symbol: META
+    shares: 250
+    cost_basis_per_share: 200.00
+    source: "Previous employment RSUs"
+
+  - symbol: AMZN
+    shares: 100
+    cost_basis_per_share: 120.00
+    source: "Direct purchase"
+
+  - symbol: GOOG
+    shares: 0                       # Set to 0 until vest occurs
+    anticipated_shares: 200         # Optimizer will account for this
+    effective_date: "2026-06-01"    # When these become real
+    source: "Upcoming RSU vest"
+
+# Total taxable portfolio value (basket + cash). Used to size positions.
+# Update this or override programmatically.
+taxable_account_value: 200000
+
+# ---------------------------------------------------------------------------
+# Tax-loss harvesting
+# ---------------------------------------------------------------------------
+tlh:
+  min_loss_to_harvest: 200        # Minimum unrealized loss ($) to bother harvesting
+  wash_sale_window_days: 30       # IRS wash sale window
+  min_holding_days: 2             # Don't harvest positions bought very recently
+  max_tracking_error_increase_bps: 50  # Reject swaps that degrade TE too much
+  min_correlation_for_swap: 0.85  # Minimum correlation for a valid replacement
+  swap_cluster_size: 4            # Number of replacement candidates per stock
+  tax_rate_short_term: 0.37       # For estimating tax savings (federal marginal)
+  tax_rate_long_term: 0.20        # Long-term capital gains rate
+  state_tax_rate: 0.0             # Add your state rate here
+
+# ---------------------------------------------------------------------------
+# Cross-account wash sale prevention (simple version)
+# Symbols listed here will NOT be sold for TLH and will NOT be bought
+# as replacement stocks. Manually maintain this list, or automate later.
+# ---------------------------------------------------------------------------
+restricted_symbols: []
+#  - AAPL    # Example: recently bought in IRA
+#  - MSFT    # Example: recently sold at loss in another account

@@ -20,9 +20,14 @@ import webbrowser
 
 from .backtest import run_backtest
 from .backtest_report import generate_html_report
-from .basket_construction import load_basket_config, resolve_external_positions
+from .basket_construction import (
+    compute_swap_scores,
+    load_basket_config,
+    resolve_external_positions,
+)
 from .basket_data import (
     compute_benchmark_sector_weights,
+    compute_returns,
     fetch_prices,
     fetch_sp500_constituents,
 )
@@ -102,6 +107,18 @@ def main():
     available = [s for s in candidate_symbols if s in prices_full.columns]
     candidate_symbols = available
     print(f"[RunBacktest] {len(candidate_symbols)} candidates with full price data")
+
+    # Compute swap scores from full-history correlation (used to bias basket toward
+    # TLH-swappable stocks at the initial basket build)
+    min_corr = tlh_cfg.get("min_correlation_for_swap", 0.85)
+    returns_full = compute_returns(prices_full)
+    correlation_full = returns_full.corr()
+    swap_scores = compute_swap_scores(
+        candidate_symbols, correlation_full, sector_map, min_correlation=min_corr,
+    )
+    swappability_weight = basket_cfg.get("swappability_weight", 0.0002)
+    swappable_count = int((swap_scores > 0).sum())
+    print(f"[RunBacktest] {swappable_count}/{len(candidate_symbols)} candidates have TLH swap partners")
     print()
 
     # -----------------------------------------------------------------------
@@ -137,6 +154,8 @@ def main():
         rebalance_frequency_days=0,  # No periodic rebalance for now
         tlh_frequency_days=args.tlh_freq,
         restricted_symbols=restricted,
+        swap_scores=swap_scores,
+        swappability_weight=swappability_weight,
     )
 
     # -----------------------------------------------------------------------

@@ -28,6 +28,7 @@ import sys
 from datetime import datetime, timedelta
 
 from .basket_construction import (
+    compute_swap_scores,
     format_basket_report,
     load_basket_config,
     optimize_basket,
@@ -170,7 +171,7 @@ def main():
     tlh_cfg = config.get("tlh", {})
 
     benchmark_symbol = benchmark_cfg.get("symbol", "VOO")
-    candidate_pool = args.top_n or basket_cfg.get("candidate_pool", 80)
+    candidate_pool = args.top_n or basket_cfg.get("candidate_pool", 150)
     lookback_days = basket_cfg.get("lookback_days", 252)
     total_value = args.value or config.get("taxable_account_value", 200_000)
 
@@ -197,14 +198,15 @@ def main():
     latest_prices = prices_df.iloc[-1].to_dict()
 
     # -----------------------------------------------------------------------
-    # 2. Build swap clusters
+    # 2. Build swap clusters + swap scores
     # -----------------------------------------------------------------------
+    min_corr = tlh_cfg.get("min_correlation_for_swap", 0.85)
     print("[TLH] Computing swap clusters...")
     correlation = returns.corr()
     clusters = build_swap_clusters(
         correlation=correlation,
         sector_map=sector_map,
-        min_correlation=tlh_cfg.get("min_correlation_for_swap", 0.85),
+        min_correlation=min_corr,
         cluster_size=tlh_cfg.get("swap_cluster_size", 4),
         candidate_symbols=candidate_symbols,
     )
@@ -217,6 +219,11 @@ def main():
         print()
         print(format_cluster_report(clusters, sector_map))
         return 0
+
+    swap_scores = compute_swap_scores(
+        candidate_symbols, correlation, sector_map, min_correlation=min_corr,
+    )
+    swappability_weight = basket_cfg.get("swappability_weight", 0.0002)
 
     # -----------------------------------------------------------------------
     # 3. Build basket
@@ -242,6 +249,8 @@ def main():
         max_stocks=basket_cfg.get("max_stocks", 40),
         turnover_penalty=basket_cfg.get("turnover_penalty", 0.005),
         sector_max_deviation_pct=basket_cfg.get("sector_max_deviation_pct", 5.0),
+        swap_scores=swap_scores,
+        swappability_weight=swappability_weight,
         solver=opt_cfg.get("solver", "CLARABEL"),
         max_iterations=opt_cfg.get("max_iterations", 10000),
     )

@@ -144,6 +144,8 @@ def run_backtest(
     rebalance_frequency_days: int = 7,
     tlh_frequency_days: int = 7,
     restricted_symbols: set = None,
+    swap_scores=None,
+    swappability_weight: float = 0.0002,
 ) -> dict:
     """
     Run a full backtest.
@@ -224,6 +226,8 @@ def run_backtest(
         max_stocks=basket_cfg.get("max_stocks", 40),
         turnover_penalty=basket_cfg.get("turnover_penalty", 0.005),
         sector_max_deviation_pct=basket_cfg.get("sector_max_deviation_pct", 5.0),
+        swap_scores=swap_scores,
+        swappability_weight=swappability_weight,
         solver=opt_cfg.get("solver", "CLARABEL"),
         max_iterations=opt_cfg.get("max_iterations", 10000),
     )
