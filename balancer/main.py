@@ -3,17 +3,17 @@ import os
 import sys
 import time
 import traceback
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
+import pandas_market_calendars as mcal
 import yaml
 from tabulate import tabulate
-import pandas_market_calendars as mcal
-from datetime import datetime, timezone, timedelta
 
 from .auth import get_session
 from .circuit_breaker import check_allowed, record_trades
 from .etrade_client import ETradeClient
-from .journal import log_preview, log_place, log_cycle
+from .journal import log_cycle, log_place, log_preview
 from .optimizer import optimize_integer_portfolio
 from .portfolio import extract_positions
 from .rebalance import current_weights

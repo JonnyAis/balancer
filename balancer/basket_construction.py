@@ -12,7 +12,6 @@ the optimizer treats that as fixed exposure. It minimizes tracking error of the
 
 import math
 from datetime import datetime
-from typing import Optional
 
 import numpy as np
 import pandas as pd
