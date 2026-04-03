@@ -8,15 +8,19 @@ benchmark:
 
 basket:
   max_stocks: 40                  # Target number of stocks in basket
-  candidate_pool: 150             # Pull top N index constituents by weight
+  candidate_pool: 150             # Top N index constituents by weight
                                   # (150 gives enough sector depth for swap clusters)
   lookback_days: 252              # ~1 year of trading days for covariance
-  min_weight_pct: 0.5             # Minimum position size (%) or else 0
+  min_weight_pct: 1.5             # Minimum position size (%) or else 0
+                                  # At $200K, 1.5% = $3,000 min position
+                                  # A 7% decline on $3K = $210 harvestable loss
   max_weight_pct: 8.0             # Maximum single-stock concentration
   turnover_penalty: 0.005         # Penalty on |w_new - w_current| (reduces churn)
   sector_max_deviation_pct: 5.0   # Max sector weight deviation from benchmark
-  swappability_weight: 0.0002     # Bonus for picking TLH-swappable stocks
-                                  # 0 = ignore, higher = more TLH-friendly (at TE cost)
+  swappability_weight: 0.001      # Bonus for picking TLH-swappable stocks
+                                  # 0 = pure TE minimization (no TLH awareness)
+                                  # 0.001 = moderate TLH bias
+                                  # 0.002+ = aggressive TLH bias (higher TE cost)
 
 optimizer:
   solver: CLARABEL                # cvxpy solver (CLARABEL, SCS, OSQP all work)
@@ -64,9 +68,5 @@ tlh:
 
 # ---------------------------------------------------------------------------
 # Cross-account wash sale prevention (simple version)
-# Symbols listed here will NOT be sold for TLH and will NOT be bought
-# as replacement stocks. Manually maintain this list, or automate later.
 # ---------------------------------------------------------------------------
 restricted_symbols: []
-#  - AAPL    # Example: recently bought in IRA
-#  - MSFT    # Example: recently sold at loss in another account
