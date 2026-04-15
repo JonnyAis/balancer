@@ -277,21 +277,35 @@ def optimize_basket(
         ext_weights_total, basket_fraction,
     )
 
-    sector_constraints = []
+    max_dev = sector_max_deviation_pct / 100.0
+    sector_bounds = {}
     for sector in unique_sectors:
-        sector_mask = np.array([1.0 if sectors[i] == sector else 0.0 for i in range(n)])
-        basket_sector_weight = sector_mask @ w  # Basket only, not combined
         target = basket_sector_targets.get(sector, 0.0)
-        max_dev = sector_max_deviation_pct / 100.0
-
-        # Lower bound: don't go below target - deviation, but never below 0
         lower = max(0.0, target - max_dev)
-        # Upper bound: target + deviation, but capped at 1.0
         upper = min(1.0, target + max_dev)
+        if upper >= lower:
+            sector_bounds[sector] = (lower, upper)
 
-        if upper >= lower:  # Only add if feasible
+    # If sum of lower bounds > 1.0, the constraints are collectively
+    # overconstrained (e.g. large external positions reduce basket_fraction,
+    # amplifying individual sector targets). Drop lower bounds in that case
+    # so the optimizer can still enforce upper bounds (concentration caps).
+    sum_lower = sum(lb for lb, _ in sector_bounds.values())
+    enforce_lower = sum_lower <= 1.0
+
+    sector_constraints = []
+    for sector, (lower, upper) in sector_bounds.items():
+        sector_mask = np.array([1.0 if sectors[i] == sector else 0.0 for i in range(n)])
+        basket_sector_weight = sector_mask @ w
+        if enforce_lower and lower > 0.0:
             sector_constraints.append(basket_sector_weight >= lower)
-            sector_constraints.append(basket_sector_weight <= upper)
+        sector_constraints.append(basket_sector_weight <= upper)
+
+    if not enforce_lower:
+        print(
+            f"[Basket] Sector lower bounds sum={sum_lower:.2f} > 1.0 "
+            "(large externals reduce basket_fraction) - dropping lower bounds"
+        )
 
     constraints.extend(sector_constraints)
 
